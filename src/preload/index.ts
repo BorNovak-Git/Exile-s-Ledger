@@ -1,8 +1,32 @@
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { ParseItemTextResponse, TradeSearchRequest, TradeSearchResponse, ApiErrorShape } from '../shared/trade'
 
 // Custom APIs for renderer
-const api = {}
+const api = {
+  trade: {
+    parseItemText: (text: string): Promise<ParseItemTextResponse> => {
+      console.log('[preload] invoke trade:parseItemText', { chars: text?.length ?? 0 })
+      return ipcRenderer.invoke('trade:parseItemText', text)
+    },
+    search: (req: TradeSearchRequest): Promise<TradeSearchResponse | ApiErrorShape> => {
+      console.log('[preload] invoke trade:search', {
+        league: req.league,
+        baseUrl: req.baseUrl,
+        selectedFilters: req.selectedFilters?.length ?? 0
+      })
+      return ipcRenderer.invoke('trade:search', req)
+    },
+    connect: (baseUrl?: string): Promise<{ ok: true } | ApiErrorShape> => {
+      console.log('[preload] invoke trade:connect', { baseUrl })
+      return ipcRenderer.invoke('trade:connect', baseUrl)
+    },
+    status: (baseUrl?: string): Promise<{ connected: boolean; cookies: string[] } | ApiErrorShape> => {
+      console.log('[preload] invoke trade:status', { baseUrl })
+      return ipcRenderer.invoke('trade:status', baseUrl)
+    }
+  }
+}
 
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
