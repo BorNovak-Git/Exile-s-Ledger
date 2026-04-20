@@ -1,10 +1,57 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, toRaw } from 'vue'
 import type { ApiErrorShape, ParseItemTextResponse, TradeFilterOption, TradeSearchResponse } from '../../shared/trade'
+import { loadSettings, saveSettings, type AppSettings } from './settings'
 
 const itemText = ref('')
-const league = ref('Standard')
-const baseUrl = ref('https://www.pathofexile.com')
+const settings = ref<AppSettings>(loadSettings())
+
+const KNOWN_LEAGUES = ['Standard', 'Hardcore'] as const
+type KnownLeague = (typeof KNOWN_LEAGUES)[number]
+
+const leagueSelectValue = computed<string>({
+  get() {
+    return (KNOWN_LEAGUES as readonly string[]).includes(settings.value.league) ? settings.value.league : '__custom__'
+  },
+  set(v) {
+    if (v === '__custom__') {
+      if (!settings.value.league.trim()) settings.value.league = 'Standard'
+    } else {
+      settings.value.league = v
+    }
+    saveSettings(settings.value)
+  }
+})
+
+const customLeague = computed<string>({
+  get() {
+    return settings.value.league
+  },
+  set(v) {
+    settings.value.league = v
+    saveSettings(settings.value)
+  }
+})
+
+const baseUrl = computed<string>({
+  get() {
+    return settings.value.baseUrl
+  },
+  set(v) {
+    settings.value.baseUrl = v
+    saveSettings(settings.value)
+  }
+})
+
+const showItemStatsOnHover = computed<boolean>({
+  get() {
+    return settings.value.showItemStatsOnHover
+  },
+  set(v) {
+    settings.value.showItemStatsOnHover = v
+    saveSettings(settings.value)
+  }
+})
 
 const parsing = ref(false)
 const searching = ref(false)
@@ -76,8 +123,8 @@ async function onSearch(): Promise<void> {
     const plainSelected = toPlainSelectedFilters(selectedFilters.value)
     console.log('[renderer] selected filters (plain):', plainSelected)
     const res = await window.api.trade.search({
-      league: league.value.trim() || 'Standard',
-      baseUrl: baseUrl.value.trim() || undefined,
+      league: settings.value.league.trim() || 'Standard',
+      baseUrl: settings.value.baseUrl.trim() || undefined,
       selectedFilters: plainSelected,
       limit: 10
     })
@@ -99,7 +146,7 @@ async function onConnect(): Promise<void> {
   error.value = null
   connecting.value = true
   try {
-    const res = await window.api.trade.connect(baseUrl.value.trim() || undefined)
+    const res = await window.api.trade.connect(settings.value.baseUrl.trim() || undefined)
     if (isApiErrorShape(res)) error.value = res.message
     else {
       console.log('[renderer] connect opened')
@@ -119,7 +166,7 @@ async function onConnect(): Promise<void> {
 
 async function refreshTradeStatus(): Promise<void> {
   try {
-    const res = await window.api.trade.status(baseUrl.value.trim() || undefined)
+    const res = await window.api.trade.status(settings.value.baseUrl.trim() || undefined)
     if (isApiErrorShape(res)) {
       tradeConnected.value = null
       tradeCookies.value = []
@@ -134,6 +181,8 @@ async function refreshTradeStatus(): Promise<void> {
 }
 
 onMounted(() => {
+  // in case localStorage is cleared or schema changes
+  settings.value = loadSettings()
   refreshTradeStatus()
 })
 </script>
@@ -193,21 +242,40 @@ onMounted(() => {
           <summary>Show cookie names (debug)</summary>
           <pre class="cookiePre">{{ tradeCookies.join('\n') }}</pre>
         </details>
+
+        <div class="settingsGrid">
+          <label class="field">
+            <div class="label">League</div>
+            <select v-model="leagueSelectValue" class="input">
+              <option v-for="l in (KNOWN_LEAGUES as readonly KnownLeague[])" :key="l" :value="l">
+                {{ l }}
+              </option>
+              <option value="__custom__">Custom…</option>
+            </select>
+          </label>
+
+          <label class="field" v-if="leagueSelectValue === '__custom__'">
+            <div class="label">Custom league</div>
+            <input v-model="customLeague" class="input" placeholder="e.g. Standard" />
+          </label>
+
+          <label class="field">
+            <div class="label">Trade base URL</div>
+            <input v-model="baseUrl" class="input" placeholder="https://www.pathofexile.com" />
+          </label>
+
+          <label class="field checkboxField">
+            <div class="label">Results hover</div>
+            <label class="checkboxRow">
+              <input type="checkbox" v-model="showItemStatsOnHover" />
+              <span>Show item stats on hover</span>
+            </label>
+          </label>
+        </div>
       </div>
     </div>
 
     <section class="card">
-      <div class="row">
-        <label class="field">
-          <div class="label">League</div>
-          <input v-model="league" class="input" placeholder="e.g. Standard" />
-        </label>
-        <label class="field">
-          <div class="label">Trade base URL</div>
-          <input v-model="baseUrl" class="input" placeholder="https://www.pathofexile.com" />
-        </label>
-      </div>
-
       <label class="field">
         <div class="label">Item text</div>
         <textarea
@@ -271,6 +339,48 @@ onMounted(() => {
                 <span v-if="r.corrupted">Corrupted</span>
                 <span v-if="r.note">Note: {{ r.note }}</span>
               </div>
+
+              <div v-if="showItemStatsOnHover && r.stats" class="hoverCard">
+                <div v-if="r.stats.properties?.length" class="hoverSection">
+                  <div class="hoverTitle">Properties</div>
+                  <div v-for="(line, i) in r.stats.properties" :key="'p' + i" class="hoverLine">{{ line }}</div>
+                </div>
+                <div v-if="r.stats.requirements?.length" class="hoverSection">
+                  <div class="hoverTitle">Requirements</div>
+                  <div v-for="(line, i) in r.stats.requirements" :key="'r' + i" class="hoverLine">{{ line }}</div>
+                </div>
+                <div v-if="r.stats.implicitMods?.length" class="hoverSection">
+                  <div class="hoverTitle">Implicit</div>
+                  <div v-for="(line, i) in r.stats.implicitMods" :key="'im' + i" class="hoverLine mod implicit">
+                    {{ line }}
+                  </div>
+                </div>
+                <div v-if="r.stats.explicitMods?.length" class="hoverSection">
+                  <div class="hoverTitle">Explicit</div>
+                  <div v-for="(line, i) in r.stats.explicitMods" :key="'em' + i" class="hoverLine mod explicit">
+                    {{ line }}
+                  </div>
+                </div>
+                <div v-if="r.stats.enchantMods?.length" class="hoverSection">
+                  <div class="hoverTitle">Enchant</div>
+                  <div v-for="(line, i) in r.stats.enchantMods" :key="'en' + i" class="hoverLine mod enchant">
+                    {{ line }}
+                  </div>
+                </div>
+                <div v-if="r.stats.fracturedMods?.length" class="hoverSection">
+                  <div class="hoverTitle">Fractured</div>
+                  <div v-for="(line, i) in r.stats.fracturedMods" :key="'fr' + i" class="hoverLine mod fractured">
+                    {{ line }}
+                  </div>
+                </div>
+                <div v-if="r.stats.craftedMods?.length" class="hoverSection">
+                  <div class="hoverTitle">Crafted</div>
+                  <div v-for="(line, i) in r.stats.craftedMods" :key="'cr' + i" class="hoverLine mod crafted">
+                    {{ line }}
+                  </div>
+                </div>
+              </div>
+
               <details v-if="r.whisper" class="whisper">
                 <summary>Whisper</summary>
                 <pre class="whisperText">{{ r.whisper }}</pre>
@@ -417,6 +527,12 @@ onMounted(() => {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+.settingsGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-top: 12px;
+}
 .statusLine {
   display: flex;
   align-items: center;
@@ -509,6 +625,7 @@ onMounted(() => {
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.18);
+  position: relative;
 }
 .resultTop {
   display: flex;
@@ -544,11 +661,76 @@ onMounted(() => {
   white-space: pre-wrap;
   font-size: 12px;
 }
+
+.checkboxField {
+  grid-column: 1 / -1;
+}
+.checkboxRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.hoverCard {
+  display: none;
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  top: calc(100% + 8px);
+  z-index: 20;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(20, 22, 30, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5);
+}
+.result:hover .hoverCard {
+  display: block;
+}
+.hoverSection + .hoverSection {
+  margin-top: 10px;
+}
+.hoverTitle {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 6px;
+}
+.hoverLine {
+  font-size: 12px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.88);
+}
+.hoverLine.mod {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+.hoverLine.mod.implicit {
+  color: rgba(140, 200, 255, 0.92);
+}
+.hoverLine.mod.crafted {
+  color: rgba(130, 255, 170, 0.92);
+}
+.hoverLine.mod.fractured {
+  color: rgba(255, 210, 140, 0.92);
+}
+.hoverLine.mod.enchant {
+  color: rgba(255, 170, 255, 0.92);
+}
 @media (max-width: 980px) {
   .grid {
     grid-template-columns: 1fr;
   }
   .row {
+    grid-template-columns: 1fr;
+  }
+  .settingsGrid {
     grid-template-columns: 1fr;
   }
 }

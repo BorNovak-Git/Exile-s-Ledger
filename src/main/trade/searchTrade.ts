@@ -1,4 +1,4 @@
-import type { TradeListingSummary, TradeSearchRequest, TradeSearchResponse } from '../../shared/trade'
+import type { TradeItemStats, TradeListingSummary, TradeSearchRequest, TradeSearchResponse } from '../../shared/trade'
 import { netRequestJson, netRequestText } from './netHttp'
 
 type TradeSearchApiResponse = {
@@ -16,6 +16,13 @@ type TradeFetchApiResponse = {
       ilvl?: number
       corrupted?: boolean
       note?: string
+      requirements?: Array<{ name?: string; values?: Array<[string, number]> }>
+      properties?: Array<{ name?: string; values?: Array<[string, number]> }>
+      implicitMods?: string[]
+      explicitMods?: string[]
+      craftedMods?: string[]
+      enchantMods?: string[]
+      fracturedMods?: string[]
     }
     listing?: {
       whisper?: string
@@ -29,6 +36,58 @@ function formatPrice(price?: { type?: string; amount?: number; currency?: string
   if (!price) return undefined
   if (price.amount === undefined || !price.currency) return undefined
   return `${price.amount} ${price.currency}`
+}
+
+function formatNameValueLines(
+  list?: Array<{ name?: string; values?: Array<[string, number]> }>
+): string[] | undefined {
+  if (!list || !list.length) return undefined
+  const lines: string[] = []
+  for (const p of list) {
+    const name = p.name?.trim()
+    if (!name) continue
+    const valueText = (p.values ?? [])
+      .map((v) => (Array.isArray(v) && typeof v[0] === 'string' ? v[0] : ''))
+      .filter((x) => x && x.trim().length)
+      .join(' / ')
+    lines.push(valueText.length ? `${name}: ${valueText}` : name)
+  }
+  return lines.length ? lines : undefined
+}
+
+function toTradeItemStats(item?: TradeFetchApiResponse['result'][number]['item']): TradeItemStats | undefined {
+  if (!item) return undefined
+  const requirements = formatNameValueLines(item.requirements)
+  const properties = formatNameValueLines(item.properties)
+  const implicitMods = item.implicitMods?.length ? item.implicitMods : undefined
+  const explicitMods = item.explicitMods?.length ? item.explicitMods : undefined
+  const craftedMods = item.craftedMods?.length ? item.craftedMods : undefined
+  const enchantMods = item.enchantMods?.length ? item.enchantMods : undefined
+  const fracturedMods = item.fracturedMods?.length ? item.fracturedMods : undefined
+
+  if (
+    !requirements &&
+    !properties &&
+    !implicitMods &&
+    !explicitMods &&
+    !craftedMods &&
+    !enchantMods &&
+    !fracturedMods &&
+    item.corrupted === undefined
+  ) {
+    return undefined
+  }
+
+  return {
+    requirements,
+    properties,
+    implicitMods,
+    explicitMods,
+    craftedMods,
+    enchantMods,
+    fracturedMods,
+    corrupted: item.corrupted
+  }
 }
 
 type Trade2Payload = {
@@ -190,7 +249,8 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
     typeLine: r.item?.typeLine,
     ilvl: r.item?.ilvl,
     corrupted: r.item?.corrupted,
-    note: r.item?.note
+    note: r.item?.note,
+    stats: toTradeItemStats(r.item)
   }))
 
   return {

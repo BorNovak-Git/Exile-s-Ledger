@@ -31,6 +31,17 @@ export type TradeSearchRequest = {
   limit?: number
 }
 
+export type TradeItemStats = {
+  requirements?: string[]
+  properties?: string[]
+  implicitMods?: string[]
+  explicitMods?: string[]
+  craftedMods?: string[]
+  enchantMods?: string[]
+  fracturedMods?: string[]
+  corrupted?: boolean
+}
+
 export type TradeListingSummary = {
   id: string
   whisper?: string
@@ -41,6 +52,7 @@ export type TradeListingSummary = {
   ilvl?: number
   corrupted?: boolean
   note?: string
+  stats?: TradeItemStats
 }
 
 export type TradeSearchResponse = {
