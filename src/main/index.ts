@@ -1,14 +1,31 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, clipboard, ipcMain, session } from 'electron'
 import { join } from 'path'
+import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
+import { parseItemText } from './trade/parseItemText'
+import { fetchPoe2LeagueIds } from './trade/poe2Leagues'
+import { searchTrade } from './trade/searchTrade'
+import type {
+  ApiErrorShape,
+  ParseItemTextResponse,
+  TradeSearchRequest,
+  TradeSearchResponse
+} from '../shared/trade'
+import { registerOverlayGlobalShortcut, unregisterAllGlobalShortcuts } from './overlayHotkey'
+
+let connectWindow: BrowserWindow | null = null
+let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
+    frame: false,
+    /** Match renderer `--bg` so there is no default OS/chrome flash around the UI. */
+    backgroundColor: '#131313',
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -18,7 +35,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow?.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -33,14 +50,29 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 }
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  // Set app user model id for windows (match `appId` in electron-builder.yml)
+  electronApp.setAppUserModelId('com.electron.app')
+
+  if (app.isPackaged) {
+    autoUpdater.logger = console
+    autoUpdater.on('error', (err) => {
+      console.error('[autoUpdater] error', err)
+    })
+    autoUpdater.on('update-downloaded', () => {
+      console.log('[autoUpdater] update downloaded; will install on quit')
+    })
+    void autoUpdater.checkForUpdatesAndNotify()
+  }
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
@@ -52,7 +84,157 @@ app.whenReady().then(() => {
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
 
+  ipcMain.handle('app:minimizeMainWindow', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize()
+  })
+
+  ipcMain.handle('app:closeMainWindow', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
+  })
+
+  ipcMain.handle('clipboard:readText', () => clipboard.readText())
+
+  ipcMain.handle(
+    'overlay:registerHotkey',
+    async (_evt, accelerator: string): Promise<{ ok: true } | { message: string }> => {
+      return registerOverlayGlobalShortcut(accelerator, () => mainWindow)
+    }
+  )
+
+  ipcMain.handle(
+    'trade:parseItemText',
+    async (_evt, text: string): Promise<ParseItemTextResponse> => {
+      console.log('[trade:parseItemText] input chars:', text?.length ?? 0)
+      const res = parseItemText(text)
+      console.log('[trade:parseItemText] parsed:', {
+        itemName: res.itemName,
+        itemType: res.itemType,
+        filters: res.filters.length
+      })
+      return res
+    }
+  )
+
+  ipcMain.handle(
+    'trade:connect',
+    async (_evt, baseUrl?: string): Promise<{ ok: true } | ApiErrorShape> => {
+      try {
+        const url = `${(baseUrl ?? 'https://www.pathofexile.com').replace(/\/+$/, '')}/trade2`
+        if (connectWindow && !connectWindow.isDestroyed()) {
+          connectWindow.focus()
+          connectWindow.loadURL(url)
+          return { ok: true }
+        }
+
+        connectWindow = new BrowserWindow({
+          width: 1100,
+          height: 800,
+          show: true,
+          autoHideMenuBar: false
+        })
+        connectWindow.on('closed', () => {
+          connectWindow = null
+        })
+        console.log('[trade:connect] opening:', url)
+        await connectWindow.loadURL(url)
+        return { ok: true }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        return { message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'trade:status',
+    async (
+      _evt,
+      baseUrl?: string
+    ): Promise<{ connected: boolean; cookies: string[] } | ApiErrorShape> => {
+      try {
+        const origin = (baseUrl ?? 'https://www.pathofexile.com').replace(/\/+$/, '')
+        const url = origin.startsWith('http') ? origin : `https://${origin}`
+
+        // Prefer domain-based lookup (cookie scope can vary by path/subdomain).
+        const host = new URL(url).hostname
+        const apexDomain = host.split('.').slice(-2).join('.')
+        const cookies = await session.defaultSession.cookies.get({ domain: apexDomain })
+        const names = cookies.map((c) => c.name)
+
+        // Consider "connected" if we have either Cloudflare clearance cookies OR a PoE session cookie.
+        const connected =
+          names.includes('cf_clearance') || names.includes('__cf_bm') || names.includes('POESESSID')
+
+        console.log('[trade:status]', { url, apexDomain, connected, cookies: names })
+        return { connected, cookies: names }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        return { message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'trade:listLeagues',
+    async (_evt, baseUrl?: string): Promise<{ leagues: string[] } | ApiErrorShape> => {
+      try {
+        const origin = (baseUrl ?? 'https://www.pathofexile.com').replace(/\/+$/, '')
+        const leagues = await fetchPoe2LeagueIds(origin)
+        return { leagues }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        return { message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'trade:search',
+    async (_evt, req: TradeSearchRequest): Promise<TradeSearchResponse | ApiErrorShape> => {
+      try {
+        console.log('[trade:search] request:', {
+          league: req.league,
+          baseUrl: req.baseUrl,
+          selectedFilters: req.selectedFilters?.map((f) => ({
+            id: f.id,
+            tradeId: f.tradeId,
+            value: f.value
+          }))
+        })
+        return await searchTrade(req)
+      } catch (err) {
+        console.log('[trade:search] error thrown (pre-serialization):', {
+          typeof: typeof err,
+          isError: err instanceof Error,
+          name: err instanceof Error ? err.name : undefined,
+          message: err instanceof Error ? err.message : undefined
+        })
+        console.log(
+          '[trade:search] NOTE: "object could not be cloned" happens when IPC tries to return a non-structured-cloneable value (like Error/Response). We serialize errors to plain objects below.'
+        )
+        // IMPORTANT: IPC return values must be structured-cloneable.
+        // Returning raw Error / Response objects can trigger "object could not be cloned".
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        const details =
+          err instanceof Error
+            ? {
+                name: err.name,
+                message: err.message,
+                stack: err.stack
+              }
+            : typeof err === 'object'
+              ? { type: Object.prototype.toString.call(err) }
+              : { value: err }
+        return { message, details }
+      }
+    }
+  )
+
   createWindow()
+
+  app.on('will-quit', () => {
+    unregisterAllGlobalShortcuts()
+  })
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
