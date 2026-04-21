@@ -2,12 +2,12 @@ export type AppSettings = {
   league: string
   baseUrl: string
   showItemStatsOnHover: boolean
-  /**
-   * Electron accelerator (e.g. CommandOrControl+Shift+E). Empty = disabled.
-   * @see https://www.electronjs.org/docs/latest/api/accelerator
-   */
+  /** Electron globalShortcut string. Empty = disabled. @see https://www.electronjs.org/docs/latest/api/accelerator */
   overlayAccelerator: string
 }
+
+/** Initial install default only — UI should use `settings.overlayAccelerator`, not this string directly. */
+export const DEFAULT_OVERLAY_ACCELERATOR = 'CommandOrControl+Shift+E'
 
 const SETTINGS_KEY = 'poe-app.settings.v1'
 
@@ -15,7 +15,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   league: 'Standard',
   baseUrl: 'https://www.pathofexile.com',
   showItemStatsOnHover: true,
-  overlayAccelerator: 'CommandOrControl+Shift+E'
+  overlayAccelerator: DEFAULT_OVERLAY_ACCELERATOR
 }
 
 export function loadSettings(): AppSettings {

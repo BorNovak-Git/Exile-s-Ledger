@@ -121,7 +121,7 @@ export function registerOverlayGlobalShortcut(
 
   if (!ok) {
     return {
-      message: `Could not register "${acc}". It may be invalid, reserved, or already used by another app. Try another combo (e.g. Ctrl+Shift+E).`
+      message: `Could not register "${acc}". It may be invalid, reserved, or already used by another app. Try a different combination.`
     }
   }
 

@@ -7,8 +7,9 @@ import type {
   TradeListingSummary,
   TradeSearchResponse
 } from '../../shared/trade'
-import { loadSettings, saveSettings, type AppSettings } from './settings'
+import { DEFAULT_OVERLAY_ACCELERATOR, loadSettings, saveSettings, type AppSettings } from './settings'
 import EditableFilterRow from './EditableFilterRow.vue'
+import { buildElectronAccelerator } from './electronAcceleratorFromKeyEvent'
 
 const itemText = ref('')
 const settings = ref<AppSettings>(loadSettings())
@@ -71,6 +72,68 @@ const overlayAccelerator = computed({
 const overlayHotkeyRegError = ref<string | null>(null)
 let removeOverlayHotkeyListener: (() => void) | null = null
 let overlayHotkeyDebounce: ReturnType<typeof setTimeout> | null = null
+
+const recordingKeybind = ref(false)
+const keybindRecorderCardRef = ref<HTMLElement | null>(null)
+const keybindRecordError = ref<string | null>(null)
+
+function startRecordingKeybind(): void {
+  keybindRecordError.value = null
+  recordingKeybind.value = true
+}
+
+function stopRecordingKeybind(): void {
+  recordingKeybind.value = false
+}
+
+function onGlobalKeyRecord(e: KeyboardEvent): void {
+  if (!recordingKeybind.value) return
+  if (e.key === 'Escape') {
+    e.preventDefault()
+    e.stopPropagation()
+    stopRecordingKeybind()
+    return
+  }
+  e.preventDefault()
+  e.stopPropagation()
+  const acc = buildElectronAccelerator(e)
+  if (!acc) {
+    keybindRecordError.value =
+      'That key is not supported here. Try Ctrl/Cmd + a letter or number, F-keys, or type the accelerator manually.'
+    return
+  }
+  keybindRecordError.value = null
+  overlayAccelerator.value = acc
+  void applyOverlayHotkeyFromSettings()
+  stopRecordingKeybind()
+}
+
+watch(recordingKeybind, (on) => {
+  if (on) {
+    nextTick(() => {
+      window.addEventListener('keydown', onGlobalKeyRecord, true)
+      keybindRecorderCardRef.value?.focus()
+    })
+  } else {
+    window.removeEventListener('keydown', onGlobalKeyRecord, true)
+  }
+})
+
+/** Saved Electron accelerator (trimmed). Empty means hotkey disabled. */
+const grabItemHotkeyDisplay = computed(() => settings.value.overlayAccelerator.trim())
+
+/** Same as display, or a short label when hotkey is off. */
+const grabItemHotkeyLabel = computed(() =>
+  grabItemHotkeyDisplay.value.length ? grabItemHotkeyDisplay.value : 'Hotkey off (set below)'
+)
+
+/** Header / one-liners — always reflects the current saved keybind. */
+const headerSubtitle = computed(() => {
+  if (!grabItemHotkeyDisplay.value.length) {
+    return 'Set grab hotkey in Settings, or clipboard → filters → search'
+  }
+  return `Press ${grabItemHotkeyDisplay.value} in PoE, or clipboard → filters → search`
+})
 
 async function applyOverlayHotkeyFromSettings(): Promise<void> {
   overlayHotkeyRegError.value = null
@@ -244,15 +307,35 @@ function toPlainSelectedFilters(list: TradeFilterOption[]): TradeFilterOption[] 
 async function onConvert(): Promise<void> {
   error.value = null
   results.value = null
+  const raw = itemText.value.trim()
+  if (!raw.length) {
+    error.value = `No item text. Press ${grabItemHotkeyLabel.value} in PoE or use Import from clipboard.`
+    return
+  }
   parsing.value = true
   try {
-    const res = await window.api.trade.parseItemText(itemText.value)
+    const res = await window.api.trade.parseItemText(raw)
     parseResult.value = res
     selectedIds.value = new Set(res.filters.map((f) => f.id))
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to parse item text'
   } finally {
     parsing.value = false
+  }
+}
+
+async function onImportFromClipboard(): Promise<void> {
+  error.value = null
+  try {
+    const text = await window.api.app.readClipboardText()
+    if (!text.trim()) {
+      error.value = 'Clipboard has no text. In PoE, focus an item and press Ctrl+C, then try again.'
+      return
+    }
+    itemText.value = text
+    await onConvert()
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : 'Could not read clipboard'
   }
 }
 
@@ -383,6 +466,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onScrollCloseTooltip, true)
+  window.removeEventListener('keydown', onGlobalKeyRecord, true)
   clearListingTooltipHide()
   removeOverlayHotkeyListener?.()
   removeOverlayHotkeyListener = null
@@ -400,7 +484,7 @@ onUnmounted(() => {
           <span class="mi">inventory_2</span>
           <div class="brandText">
             <h1 class="brandTitle">Exile's Ledger</h1>
-            <p class="brandSub">Hotkey or paste item → filters → search</p>
+            <p class="brandSub">{{ headerSubtitle }}</p>
           </div>
         </div>
         <div class="headerActions">
@@ -430,42 +514,33 @@ onUnmounted(() => {
 
     <!-- ── MAIN ─────────────────────────────────────────────────── -->
     <main class="mainWrap">
+      <div v-if="error" class="errorStrip">{{ error }}</div>
 
-      <!-- Input card -->
-      <section class="inputCard">
-        <div class="inputCardLabel">Item Text</div>
-        <textarea
-          v-model="itemText"
-          class="itemTextarea"
-          placeholder="Paste the item text copied from Path of Exile 2…"
-          spellcheck="false"
-        />
-        <div class="inputActions">
-          <button
-            class="btn btnSecondary"
-            :disabled="parsing || itemText.trim().length === 0"
-            @click="onConvert"
-          >
-            <span class="mi btnIco">transform</span>
-            {{ parsing ? 'Reading…' : 'Read Item' }}
-          </button>
-          <button
-            class="btn btnPrimary"
-            :disabled="searching || selectedFilters.length === 0"
-            @click="onSearch"
-          >
-            <span class="mi btnIco">search_insights</span>
-            {{ searching ? 'Searching…' : 'Price Check' }}
-          </button>
-        </div>
-        <div v-if="error" class="errorBanner">{{ error }}</div>
-      </section>
-
-      <!-- Body (parsed item + results) -->
-      <div v-if="parseResult" class="bodyLayout">
-
+      <template v-if="parseResult">
+        <div class="bodyLayout">
         <!-- ── LEFT: Item card + filters ───────────────────────── -->
         <aside class="itemSidebar">
+          <div class="filterToolbar">
+            <button
+              type="button"
+              class="btn btnPrimary"
+              :disabled="searching || selectedFilters.length === 0"
+              @click="onSearch"
+            >
+              <span class="mi btnIco">search_insights</span>
+              {{ searching ? 'Searching…' : 'Price Check' }}
+            </button>
+            <button
+              type="button"
+              class="btn btnGhost"
+              :disabled="parsing"
+              title="Replace item from clipboard (PoE: Ctrl+C on item first)"
+              @click="onImportFromClipboard"
+            >
+              <span class="mi btnIco">content_paste</span>
+              Import
+            </button>
+          </div>
 
           <!-- Item header card -->
           <div class="itemCard">
@@ -670,7 +745,34 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
+        </div>
+      </template>
 
+      <div v-else class="importOnlyView">
+        <div class="importOnlyCard">
+          <span class="mi importOnlyIco">touch_app</span>
+          <h3 class="importOnlyTitle">Load an item</h3>
+          <p class="importOnlyText">
+            <template v-if="grabItemHotkeyDisplay">
+              Press <code class="kbdHint">{{ grabItemHotkeyDisplay }}</code> in Path of Exile with the item under the
+              cursor to copy its data here, or import from the clipboard.
+            </template>
+            <template v-else>
+              Set a grab hotkey in Settings, then press it in PoE with the item under the cursor, or import from the
+              clipboard.
+            </template>
+          </p>
+          <div class="importOnlyActions">
+            <button type="button" class="btn btnPrimary" :disabled="parsing" @click="onImportFromClipboard">
+              <span class="mi btnIco">content_paste</span>
+              Import from clipboard
+            </button>
+            <button type="button" class="btn btnGhost" @click="showSettings = true">
+              <span class="mi btnIco">keyboard</span>
+              Grab hotkey…
+            </button>
+          </div>
+        </div>
       </div>
     </main>
 
@@ -703,10 +805,7 @@ onUnmounted(() => {
             </button>
             <button class="btn btnGhost" @click="refreshTradeStatus">Refresh</button>
           </div>
-          <details class="cookieDet">
-            <summary class="cookieSum">Debug — cookie names</summary>
-            <pre class="cookiePre">{{ tradeCookies.join('\n') || '(none)' }}</pre>
-          </details>
+          
         </div>
 
         <!-- League -->
@@ -737,28 +836,28 @@ onUnmounted(() => {
           <input v-model="baseUrl" class="settingsInput" placeholder="https://www.pathofexile.com" />
         </div>
 
-        <!-- In-game overlay hotkey -->
+        <!-- Grab item: global hotkey -->
         <div class="settingsBlock">
-          <div class="settingsBlockLabel">In-game overlay hotkey</div>
+          <div class="settingsBlockLabel">Grab item from game</div>
           <p class="settingsHint settingsHintTight">
-            Focus Path of Exile, hover an item, then press the hotkey. The app saves your clipboard, sends
-            <strong>Ctrl+C</strong> to the game to copy the item, fills this tool, then restores your clipboard
-            (text only). Leave blank to disable.
+            Press <code class="kbdHint">{{ grabItemHotkeyLabel }}</code> in PoE with an item highlighted to copy its
+            data into this app (clipboard is restored). <strong>Change</strong> records a new key; 
           </p>
-          <input
-            v-model="overlayAccelerator"
-            class="settingsInput"
-            placeholder="e.g. CommandOrControl+Shift+E"
-            spellcheck="false"
-            autocomplete="off"
-          />
-          <div v-if="overlayHotkeyRegError" class="settingsError">{{ overlayHotkeyRegError }}</div>
-          <div class="settingsHint settingsHintTight">
-            Uses Electron
-            <a class="settingsLink" href="https://www.electronjs.org/docs/latest/api/accelerator" target="_blank" rel="noreferrer"
-              >accelerator syntax</a
-            >. Borderless / windowed PoE works best; fullscreen and elevation can block simulated keys.
+          <label class="settingsSubLabel" for="overlayAccInput">Current keybind</label>
+          <div class="accelRow">
+            <input
+              id="overlayAccInput"
+              v-model="overlayAccelerator"
+              class="settingsInput accelInput"
+              :placeholder="DEFAULT_OVERLAY_ACCELERATOR"
+              spellcheck="false"
+              autocomplete="off"
+            />
+            <button type="button" class="btn btnSecondary accelChangeBtn" @click="startRecordingKeybind">
+              Change
+            </button>
           </div>
+          <div v-if="overlayHotkeyRegError" class="settingsError">{{ overlayHotkeyRegError }}</div>
         </div>
 
         <!-- Hover stats -->
@@ -772,6 +871,35 @@ onUnmounted(() => {
 
       </div>
     </div>
+
+    <!-- Keybind recorder (Change) — capture phase listener on window while open -->
+    <Teleport to="body">
+      <div
+        v-if="recordingKeybind"
+        class="keybindRecorderBackdrop"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="keybindRecordTitle"
+        @click.self="stopRecordingKeybind"
+      >
+        <div
+          ref="keybindRecorderCardRef"
+          class="keybindRecorderCard"
+          tabindex="-1"
+          @keydown.stop
+          @click.stop
+        >
+          <h3 id="keybindRecordTitle" class="keybindRecorderTitle">Press new keybind</h3>
+          <p class="keybindRecorderHint">
+            Current: <code class="kbdHint">{{ grabItemHotkeyLabel }}</code>. Hold
+            <strong>Ctrl</strong> (Windows) or <strong>Cmd</strong> (Mac), optional Shift/Alt, then the final key.
+            <strong>Esc</strong> cancels.
+          </p>
+          <p v-if="keybindRecordError" class="settingsError keybindRecorderErr">{{ keybindRecordError }}</p>
+          <button type="button" class="btn btnGhost" @click="stopRecordingKeybind">Cancel</button>
+        </div>
+      </div>
+    </Teleport>
 
     <Teleport to="body">
       <div
@@ -1016,52 +1144,133 @@ onUnmounted(() => {
   gap: 24px;
 }
 
-/* ─── Input card ────────────────────────────────────────────────── */
-.inputCard {
-  background: var(--s1);
-  padding: 24px;
-}
-.inputCardLabel {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 0.22em;
-  text-transform: uppercase;
-  color: var(--gold);
-  margin-bottom: 10px;
-}
-.itemTextarea {
-  display: block;
-  width: 100%;
-  min-height: 120px;
-  resize: vertical;
-  background: var(--s2);
-  border: none;
-  outline: none;
-  color: var(--text);
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  padding: 12px 14px;
-  box-sizing: border-box;
-  transition: background 0.2s;
-  user-select: text;
-}
-.itemTextarea:focus { background: var(--s3); }
-.itemTextarea::placeholder { color: rgba(209, 197, 180, 0.3); }
-.inputActions {
-  display: flex;
-  gap: 10px;
-  margin-top: 14px;
-  flex-wrap: wrap;
-}
-.errorBanner {
-  margin-top: 12px;
+.errorStrip {
   padding: 11px 14px;
   background: var(--error-bg);
   color: var(--error);
   font-size: 12px;
   white-space: pre-wrap;
   border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.filterToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--s1);
+  border: 1px solid rgba(77, 70, 57, 0.12);
+}
+
+.importOnlyView {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  padding: 24px 16px;
+}
+.importOnlyCard {
+  max-width: 420px;
+  text-align: center;
+  padding: 28px 24px;
+  background: var(--s1);
+  border: 1px solid rgba(77, 70, 57, 0.15);
+}
+.importOnlyIco {
+  font-size: 40px;
+  color: var(--gold);
+  opacity: 0.85;
+  display: block;
+  margin-bottom: 12px;
+}
+.importOnlyTitle {
+  font-family: 'Newsreader', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--gold);
+  margin: 0 0 10px;
+}
+.importOnlyText {
+  margin: 0 0 20px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-dim);
+}
+.kbdHint {
+  display: inline;
+  padding: 2px 8px;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--gold);
+  background: var(--s2);
+  border: 1px solid rgba(231, 193, 120, 0.25);
+  border-radius: 2px;
+}
+.importOnlyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+}
+.settingsInlineCode {
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+  color: var(--gold-dim);
+  padding: 1px 5px;
+  background: var(--s2);
+  border-radius: 2px;
+}
+
+.accelRow {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+.accelInput {
+  flex: 1;
+  min-width: 0;
+}
+.accelChangeBtn {
+  flex-shrink: 0;
+}
+
+.keybindRecorderBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  background: rgba(0, 0, 0, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.keybindRecorderCard {
+  max-width: 420px;
+  width: 100%;
+  padding: 24px 22px;
+  background: var(--s1);
+  border: 1px solid rgba(231, 193, 120, 0.2);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.75);
+  outline: none;
+}
+.keybindRecorderTitle {
+  font-family: 'Newsreader', serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--gold);
+  margin: 0 0 10px;
+}
+.keybindRecorderHint {
+  margin: 0 0 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.keybindRecorderErr {
+  margin-bottom: 12px;
 }
 
 /* ─── Buttons ───────────────────────────────────────────────────── */

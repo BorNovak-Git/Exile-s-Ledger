@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, session } from 'electron'
+import { app, shell, BrowserWindow, clipboard, ipcMain, session } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -74,6 +74,8 @@ app.whenReady().then(() => {
   ipcMain.handle('app:closeMainWindow', () => {
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
   })
+
+  ipcMain.handle('clipboard:readText', () => clipboard.readText())
 
   ipcMain.handle(
     'overlay:registerHotkey',

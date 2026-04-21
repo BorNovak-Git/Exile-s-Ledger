@@ -8,6 +8,7 @@ declare global {
       app: {
         minimizeMainWindow(): Promise<void>
         closeMainWindow(): Promise<void>
+        readClipboardText(): Promise<string>
       }
       trade: {
         parseItemText(text: string): Promise<ParseItemTextResponse>

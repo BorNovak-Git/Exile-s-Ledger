@@ -6,7 +6,8 @@ import type { ParseItemTextResponse, TradeSearchRequest, TradeSearchResponse, Ap
 const api = {
   app: {
     minimizeMainWindow: (): Promise<void> => ipcRenderer.invoke('app:minimizeMainWindow'),
-    closeMainWindow: (): Promise<void> => ipcRenderer.invoke('app:closeMainWindow')
+    closeMainWindow: (): Promise<void> => ipcRenderer.invoke('app:closeMainWindow'),
+    readClipboardText: (): Promise<string> => ipcRenderer.invoke('clipboard:readText')
   },
   trade: {
     parseItemText: (text: string): Promise<ParseItemTextResponse> => {
