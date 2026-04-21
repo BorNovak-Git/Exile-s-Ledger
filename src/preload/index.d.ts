@@ -1,5 +1,10 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
-import type { ParseItemTextResponse, TradeSearchRequest, TradeSearchResponse, ApiErrorShape } from '../shared/trade'
+import type {
+  ParseItemTextResponse,
+  TradeSearchRequest,
+  TradeSearchResponse,
+  ApiErrorShape
+} from '../shared/trade'
 
 declare global {
   interface Window {

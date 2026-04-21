@@ -13,10 +13,15 @@ function execFileAsync(
   opts: { timeout?: number; windowsHide?: boolean } = {}
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    execFile(file, args, { timeout: opts.timeout ?? 8000, windowsHide: opts.windowsHide ?? false }, (err) => {
-      if (err) reject(err)
-      else resolve()
-    })
+    execFile(
+      file,
+      args,
+      { timeout: opts.timeout ?? 8000, windowsHide: opts.windowsHide ?? false },
+      (err) => {
+        if (err) reject(err)
+        else resolve()
+      }
+    )
   })
 }
 

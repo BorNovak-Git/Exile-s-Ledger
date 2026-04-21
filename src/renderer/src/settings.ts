@@ -25,13 +25,22 @@ export function loadSettings(): AppSettings {
     const parsed = JSON.parse(raw) as Partial<AppSettings> | null
     if (!parsed || typeof parsed !== 'object') return { ...DEFAULT_SETTINGS }
 
-    const league = typeof parsed.league === 'string' && parsed.league.trim().length ? parsed.league.trim() : DEFAULT_SETTINGS.league
+    const league =
+      typeof parsed.league === 'string' && parsed.league.trim().length
+        ? parsed.league.trim()
+        : DEFAULT_SETTINGS.league
     const baseUrl =
-      typeof parsed.baseUrl === 'string' && parsed.baseUrl.trim().length ? parsed.baseUrl.trim() : DEFAULT_SETTINGS.baseUrl
+      typeof parsed.baseUrl === 'string' && parsed.baseUrl.trim().length
+        ? parsed.baseUrl.trim()
+        : DEFAULT_SETTINGS.baseUrl
     const showItemStatsOnHover =
-      typeof parsed.showItemStatsOnHover === 'boolean' ? parsed.showItemStatsOnHover : DEFAULT_SETTINGS.showItemStatsOnHover
+      typeof parsed.showItemStatsOnHover === 'boolean'
+        ? parsed.showItemStatsOnHover
+        : DEFAULT_SETTINGS.showItemStatsOnHover
     const overlayAccelerator =
-      typeof parsed.overlayAccelerator === 'string' ? parsed.overlayAccelerator.trim() : DEFAULT_SETTINGS.overlayAccelerator
+      typeof parsed.overlayAccelerator === 'string'
+        ? parsed.overlayAccelerator.trim()
+        : DEFAULT_SETTINGS.overlayAccelerator
 
     return { league, baseUrl, showItemStatsOnHover, overlayAccelerator }
   } catch {
@@ -50,4 +59,3 @@ export function saveSettings(next: AppSettings): void {
     } satisfies AppSettings)
   )
 }
-

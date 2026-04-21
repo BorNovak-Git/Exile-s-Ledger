@@ -6,7 +6,12 @@ import icon from '../../resources/icon.png?asset'
 import { parseItemText } from './trade/parseItemText'
 import { fetchPoe2LeagueIds } from './trade/poe2Leagues'
 import { searchTrade } from './trade/searchTrade'
-import type { ApiErrorShape, ParseItemTextResponse, TradeSearchRequest, TradeSearchResponse } from '../shared/trade'
+import type {
+  ApiErrorShape,
+  ParseItemTextResponse,
+  TradeSearchRequest,
+  TradeSearchResponse
+} from '../shared/trade'
 import { registerOverlayGlobalShortcut, unregisterAllGlobalShortcuts } from './overlayHotkey'
 
 let connectWindow: BrowserWindow | null = null
@@ -96,47 +101,56 @@ app.whenReady().then(() => {
     }
   )
 
-  ipcMain.handle('trade:parseItemText', async (_evt, text: string): Promise<ParseItemTextResponse> => {
-    console.log('[trade:parseItemText] input chars:', text?.length ?? 0)
-    const res = parseItemText(text)
-    console.log('[trade:parseItemText] parsed:', {
-      itemName: res.itemName,
-      itemType: res.itemType,
-      filters: res.filters.length
-    })
-    return res
-  })
-
-  ipcMain.handle('trade:connect', async (_evt, baseUrl?: string): Promise<{ ok: true } | ApiErrorShape> => {
-    try {
-      const url = `${(baseUrl ?? 'https://www.pathofexile.com').replace(/\/+$/, '')}/trade2`
-      if (connectWindow && !connectWindow.isDestroyed()) {
-        connectWindow.focus()
-        connectWindow.loadURL(url)
-        return { ok: true }
-      }
-
-      connectWindow = new BrowserWindow({
-        width: 1100,
-        height: 800,
-        show: true,
-        autoHideMenuBar: false
+  ipcMain.handle(
+    'trade:parseItemText',
+    async (_evt, text: string): Promise<ParseItemTextResponse> => {
+      console.log('[trade:parseItemText] input chars:', text?.length ?? 0)
+      const res = parseItemText(text)
+      console.log('[trade:parseItemText] parsed:', {
+        itemName: res.itemName,
+        itemType: res.itemType,
+        filters: res.filters.length
       })
-      connectWindow.on('closed', () => {
-        connectWindow = null
-      })
-      console.log('[trade:connect] opening:', url)
-      await connectWindow.loadURL(url)
-      return { ok: true }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error'
-      return { message }
+      return res
     }
-  })
+  )
+
+  ipcMain.handle(
+    'trade:connect',
+    async (_evt, baseUrl?: string): Promise<{ ok: true } | ApiErrorShape> => {
+      try {
+        const url = `${(baseUrl ?? 'https://www.pathofexile.com').replace(/\/+$/, '')}/trade2`
+        if (connectWindow && !connectWindow.isDestroyed()) {
+          connectWindow.focus()
+          connectWindow.loadURL(url)
+          return { ok: true }
+        }
+
+        connectWindow = new BrowserWindow({
+          width: 1100,
+          height: 800,
+          show: true,
+          autoHideMenuBar: false
+        })
+        connectWindow.on('closed', () => {
+          connectWindow = null
+        })
+        console.log('[trade:connect] opening:', url)
+        await connectWindow.loadURL(url)
+        return { ok: true }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        return { message }
+      }
+    }
+  )
 
   ipcMain.handle(
     'trade:status',
-    async (_evt, baseUrl?: string): Promise<{ connected: boolean; cookies: string[] } | ApiErrorShape> => {
+    async (
+      _evt,
+      baseUrl?: string
+    ): Promise<{ connected: boolean; cookies: string[] } | ApiErrorShape> => {
       try {
         const origin = (baseUrl ?? 'https://www.pathofexile.com').replace(/\/+$/, '')
         const url = origin.startsWith('http') ? origin : `https://${origin}`
@@ -149,9 +163,7 @@ app.whenReady().then(() => {
 
         // Consider "connected" if we have either Cloudflare clearance cookies OR a PoE session cookie.
         const connected =
-          names.includes('cf_clearance') ||
-          names.includes('__cf_bm') ||
-          names.includes('POESESSID')
+          names.includes('cf_clearance') || names.includes('__cf_bm') || names.includes('POESESSID')
 
         console.log('[trade:status]', { url, apexDomain, connected, cookies: names })
         return { connected, cookies: names }

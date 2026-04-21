@@ -8,9 +8,14 @@ export type NetHttpResponse = {
   text: string
 }
 
-function normalizeHeaders(h: Record<string, string | string[]>): Record<string, string | string[]> {
+function normalizeHeaders(
+  h: Record<string, string | string[] | undefined>
+): Record<string, string | string[]> {
   const out: Record<string, string | string[]> = {}
-  for (const [k, v] of Object.entries(h)) out[k.toLowerCase()] = v
+  for (const [k, v] of Object.entries(h)) {
+    if (v === undefined) continue
+    out[k.toLowerCase()] = v
+  }
   return out
 }
 
@@ -19,7 +24,10 @@ function sleep(ms: number): Promise<void> {
 }
 
 /** Milliseconds to wait before retrying after 429 / 503 (honours Retry-After when present). */
-function backoffMsForRateLimit(headers: Record<string, string | string[]>, attemptIndex: number): number {
+function backoffMsForRateLimit(
+  headers: Record<string, string | string[]>,
+  attemptIndex: number
+): number {
   const ra = headers['retry-after']
   const raw = Array.isArray(ra) ? ra[0] : ra
   if (raw) {
@@ -51,7 +59,9 @@ export async function netRequestTextWithRetry(
     if (last.status === 429 || last.status === 503) {
       if (attempt + 1 >= maxAttempts) break
       const wait = backoffMsForRateLimit(last.headers, attempt)
-      console.warn(`[netHttp] ${last.status} on ${opts.method ?? 'GET'} ${opts.url.slice(0, 80)}… — retry in ${wait}ms (${attempt + 1}/${maxAttempts})`)
+      console.warn(
+        `[netHttp] ${last.status} on ${opts.method ?? 'GET'} ${opts.url.slice(0, 80)}… — retry in ${wait}ms (${attempt + 1}/${maxAttempts})`
+      )
       await sleep(wait)
       continue
     }
@@ -79,13 +89,17 @@ export async function netRequestText(opts: {
   return await new Promise<NetHttpResponse>((resolve, reject) => {
     request.on('response', (response) => {
       const chunks: Buffer[] = []
-      response.on('data', (chunk) => chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)))
+      response.on('data', (chunk) =>
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      )
       response.on('end', () => {
         const text = Buffer.concat(chunks).toString('utf8')
         resolve({
           status: response.statusCode,
           statusText: response.statusMessage,
-          headers: normalizeHeaders(response.headers as any),
+          headers: normalizeHeaders(
+            response.headers as Record<string, string | string[] | undefined>
+          ),
           url: opts.url,
           text
         })
@@ -104,9 +118,19 @@ export async function netRequestJson<T>(opts: {
   method?: 'GET' | 'POST'
   headers?: Record<string, string>
   body?: unknown
-}): Promise<{ status: number; headers: Record<string, string | string[]>; url: string; json?: T; text: string }> {
+}): Promise<{
+  status: number
+  headers: Record<string, string | string[]>
+  url: string
+  json?: T
+  text: string
+}> {
   const bodyString =
-    opts.body === undefined ? undefined : typeof opts.body === 'string' ? opts.body : JSON.stringify(opts.body)
+    opts.body === undefined
+      ? undefined
+      : typeof opts.body === 'string'
+        ? opts.body
+        : JSON.stringify(opts.body)
   const res = await netRequestTextWithRetry({
     url: opts.url,
     method: opts.method,
@@ -126,4 +150,3 @@ export async function netRequestJson<T>(opts: {
 
   return { status: res.status, headers: res.headers, url: res.url, json, text: res.text }
 }
-

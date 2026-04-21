@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { ParseItemTextResponse, TradeSearchRequest, TradeSearchResponse, ApiErrorShape } from '../shared/trade'
+import type {
+  ParseItemTextResponse,
+  TradeSearchRequest,
+  TradeSearchResponse,
+  ApiErrorShape
+} from '../shared/trade'
 
 // Custom APIs for renderer
 const api = {
@@ -26,7 +31,9 @@ const api = {
       console.log('[preload] invoke trade:connect', { baseUrl })
       return ipcRenderer.invoke('trade:connect', baseUrl)
     },
-    status: (baseUrl?: string): Promise<{ connected: boolean; cookies: string[] } | ApiErrorShape> => {
+    status: (
+      baseUrl?: string
+    ): Promise<{ connected: boolean; cookies: string[] } | ApiErrorShape> => {
       console.log('[preload] invoke trade:status', { baseUrl })
       return ipcRenderer.invoke('trade:status', baseUrl)
     },

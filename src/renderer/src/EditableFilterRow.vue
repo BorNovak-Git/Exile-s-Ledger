@@ -42,12 +42,7 @@ function valueFor(slot: 'min' | 'max'): string {
 <template>
   <li>
     <label class="efRow" :class="{ efRowOn: selected }">
-      <input
-        type="checkbox"
-        :checked="selected"
-        class="efCheck"
-        @change="onToggle"
-      />
+      <input type="checkbox" :checked="selected" class="efCheck" @change="onToggle" />
       <span :class="bulletClass"></span>
       <div class="efBody">
         <span class="efLabel">{{ filter.label }}</span>
@@ -97,7 +92,9 @@ function valueFor(slot: 'min' | 'max'): string {
   margin-top: 3px;
   cursor: pointer;
   border-radius: 1px;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
 .efCheck:checked {
   background: var(--gold, #e7c178);
@@ -116,9 +113,15 @@ function valueFor(slot: 'min' | 'max'): string {
 .efRowOn .efBullet {
   opacity: 1;
 }
-.efBulletGold { background: var(--gold, #e7c178); }
-.efBulletMuted { background: var(--text-dim, #d1c5b4); }
-.efBulletPurple { background: var(--purple, #e5b4ff); }
+.efBulletGold {
+  background: var(--gold, #e7c178);
+}
+.efBulletMuted {
+  background: var(--text-dim, #d1c5b4);
+}
+.efBulletPurple {
+  background: var(--purple, #e5b4ff);
+}
 
 .efBody {
   flex: 1;

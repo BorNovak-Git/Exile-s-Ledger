@@ -39,7 +39,11 @@ type TradeFetchApiResponse = {
   }>
 }
 
-function formatPrice(price?: { type?: string; amount?: number; currency?: string }): string | undefined {
+function formatPrice(price?: {
+  type?: string
+  amount?: number
+  currency?: string
+}): string | undefined {
   if (!price) return undefined
   if (price.amount === undefined || !price.currency) return undefined
   return `${price.amount} ${price.currency}`
@@ -62,7 +66,9 @@ function formatNameValueLines(
   return lines.length ? lines : undefined
 }
 
-function toTradeItemStats(item?: TradeFetchApiResponse['result'][number]['item']): TradeItemStats | undefined {
+function toTradeItemStats(
+  item?: TradeFetchApiResponse['result'][number]['item']
+): TradeItemStats | undefined {
   if (!item) return undefined
   const requirements = formatNameValueLines(item.requirements)
   const properties = formatNameValueLines(item.properties)
@@ -150,7 +156,11 @@ function normalizeCurrencyId(currency: string): string {
     .replace(/_orb$/g, '')
 }
 
-function priceSortValue(price?: { type?: string; amount?: number; currency?: string }): number | undefined {
+function priceSortValue(price?: {
+  type?: string
+  amount?: number
+  currency?: string
+}): number | undefined {
   if (!price || price.amount === undefined || !price.currency) return undefined
   const key = normalizeCurrencyId(price.currency)
   const mult = CHAOS_PER_UNIT[key] ?? CHAOS_PER_UNIT[key.replace(/_/g, '')] ?? 0.02
@@ -162,7 +172,11 @@ type Trade2Payload = {
     status: { option: string }
     stats?: Array<{
       type: 'and'
-      filters: Array<{ id: string; disabled: boolean; value?: { min?: number; max?: number | null } }>
+      filters: Array<{
+        id: string
+        disabled: boolean
+        value?: { min?: number; max?: number | null }
+      }>
       disabled: boolean
     }>
     filters: {
@@ -176,14 +190,19 @@ type Trade2Payload = {
 }
 
 function isTradeStatId(id: string): boolean {
-  return id.startsWith('pseudo.') || id.startsWith('explicit.') || id.startsWith('implicit.') || id.startsWith('rune.')
+  return (
+    id.startsWith('pseudo.') ||
+    id.startsWith('explicit.') ||
+    id.startsWith('implicit.') ||
+    id.startsWith('rune.')
+  )
 }
 
 /** Strip numbers / punctuation so "30% to Lightning Resistance" and "+30 to Lightning Resistance" compare as the same stat. */
 function normalizeModText(s: string): string {
   return s
     .toLowerCase()
-    .replace(/[+\-]?\d+(\.\d+)?/g, '#')
+    .replace(/[-+]?\d+(\.\d+)?/g, '#')
     .replace(/\s+/g, ' ')
     .replace(/[^a-z0-9# ]/g, ' ')
     .replace(/\s+/g, ' ')
@@ -203,7 +222,8 @@ function collectAllModTexts(item?: ItemPayload): string[] {
     item.fracturedMods
   ]
   const out: string[] = []
-  for (const b of buckets) if (Array.isArray(b)) for (const s of b) if (typeof s === 'string') out.push(s)
+  for (const b of buckets)
+    if (Array.isArray(b)) for (const s of b) if (typeof s === 'string') out.push(s)
   return out
 }
 
@@ -269,7 +289,11 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
   // PoE2 trade uses "trade2" endpoints and a query shape like:
   // POST /api/trade2/search/poe2/<league>
   // { query: { status, stats, filters }, sort }
-  const statFilters: Array<{ id: string; disabled: boolean; value?: { min?: number; max?: number | null } }> = []
+  const statFilters: Array<{
+    id: string
+    disabled: boolean
+    value?: { min?: number; max?: number | null }
+  }> = []
   const pseudos = new Set<string>()
 
   const typeFilters: Record<string, unknown> = {}
@@ -408,7 +432,11 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
   }
 
   const searchJson = searchRes.json
-  console.log('[searchTrade] search response:', { id: searchJson.id, total: searchJson.total, results: searchJson.result?.length })
+  console.log('[searchTrade] search response:', {
+    id: searchJson.id,
+    total: searchJson.total,
+    results: searchJson.result?.length
+  })
   // Trade search returns cheapest listings first; we fetch a small pool then rank client-side:
   // exact text-mod match first, then most shared mods, then cheapest (same idea as many trade overlays).
   const candidatePoolSize = textModRules.length ? Math.min(20, Math.max(limit * 2, limit)) : limit
@@ -429,9 +457,7 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
       await new Promise((r) => setTimeout(r, delayBetweenFetchChunksMs))
     }
     const chunk = allIds.slice(i, i + FETCH_CHUNK_SIZE)
-    const url = new URL(
-      `${baseUrl}/api/trade2/fetch/${chunk.map(encodeURIComponent).join(',')}`
-    )
+    const url = new URL(`${baseUrl}/api/trade2/fetch/${chunk.map(encodeURIComponent).join(',')}`)
     url.searchParams.set('query', searchJson.id)
     url.searchParams.set('realm', 'poe2')
     for (const p of pseudos) url.searchParams.append('pseudos[]', p)
@@ -453,7 +479,7 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
     let chunkJson: TradeFetchApiResponse
     try {
       chunkJson = JSON.parse(fetchRes.text) as TradeFetchApiResponse
-    } catch (e) {
+    } catch {
       throw new Error('Trade fetch returned non-JSON response.')
     }
 
@@ -484,7 +510,14 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
   const rows = top.map((s) => s.r)
   const fallbackUsed = needleCount > 0 && top.length > 0 && !top.some((s) => s.exact)
 
-  console.log('[searchTrade] fetch response items:', fetchedRows.length, 'shown:', rows.length, 'fallback:', fallbackUsed)
+  console.log(
+    '[searchTrade] fetch response items:',
+    fetchedRows.length,
+    'shown:',
+    rows.length,
+    'fallback:',
+    fallbackUsed
+  )
 
   const results: TradeListingSummary[] = rows.map((r) => {
     const sortVal = priceSortValue(r.listing?.price)
@@ -517,4 +550,3 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
     raw: { search: searchJson, fetch: fetchJson, request: body, fetchUrl: lastFetchUrl }
   }
 }
-

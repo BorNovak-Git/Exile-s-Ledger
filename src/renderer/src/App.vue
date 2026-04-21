@@ -4,10 +4,16 @@ import type {
   ApiErrorShape,
   ParseItemTextResponse,
   TradeFilterOption,
+  TradeFilterValue,
   TradeListingSummary,
   TradeSearchResponse
 } from '../../shared/trade'
-import { DEFAULT_OVERLAY_ACCELERATOR, loadSettings, saveSettings, type AppSettings } from './settings'
+import {
+  DEFAULT_OVERLAY_ACCELERATOR,
+  loadSettings,
+  saveSettings,
+  type AppSettings
+} from './settings'
 import EditableFilterRow from './EditableFilterRow.vue'
 import { buildElectronAccelerator } from './electronAcceleratorFromKeyEvent'
 
@@ -36,7 +42,9 @@ const leagueSelectValue = computed<string>({
 })
 
 const customLeague = computed<string>({
-  get() { return settings.value.league },
+  get() {
+    return settings.value.league
+  },
   set(v) {
     settings.value.league = v
     saveSettings(settings.value)
@@ -44,7 +52,9 @@ const customLeague = computed<string>({
 })
 
 const baseUrl = computed<string>({
-  get() { return settings.value.baseUrl },
+  get() {
+    return settings.value.baseUrl
+  },
   set(v) {
     settings.value.baseUrl = v
     saveSettings(settings.value)
@@ -52,7 +62,9 @@ const baseUrl = computed<string>({
 })
 
 const showItemStatsOnHover = computed<boolean>({
-  get() { return settings.value.showItemStatsOnHover },
+  get() {
+    return settings.value.showItemStatsOnHover
+  },
   set(v) {
     settings.value.showItemStatsOnHover = v
     saveSettings(settings.value)
@@ -157,18 +169,26 @@ const error = ref<string | null>(null)
 
 const filters = computed<TradeFilterOption[]>(() => parseResult.value?.filters ?? [])
 
-const filterGroups = computed<Partial<Record<TradeFilterOption['group'], TradeFilterOption[]>>>(() => {
-  const groups: Partial<Record<TradeFilterOption['group'], TradeFilterOption[]>> = {}
-  for (const f of filters.value) {
-    if (!groups[f.group]) groups[f.group] = []
-    groups[f.group]!.push(f)
+const filterGroups = computed<Partial<Record<TradeFilterOption['group'], TradeFilterOption[]>>>(
+  () => {
+    const groups: Partial<Record<TradeFilterOption['group'], TradeFilterOption[]>> = {}
+    for (const f of filters.value) {
+      if (!groups[f.group]) groups[f.group] = []
+      groups[f.group]!.push(f)
+    }
+    return groups
   }
-  return groups
-})
+)
 
-const modPrefixFilters = computed(() => filters.value.filter((f) => f.group === 'mods' && f.modAffix === 'prefix'))
-const modSuffixFilters = computed(() => filters.value.filter((f) => f.group === 'mods' && f.modAffix === 'suffix'))
-const modOtherFilters = computed(() => filters.value.filter((f) => f.group === 'mods' && f.modAffix === undefined))
+const modPrefixFilters = computed(() =>
+  filters.value.filter((f) => f.group === 'mods' && f.modAffix === 'prefix')
+)
+const modSuffixFilters = computed(() =>
+  filters.value.filter((f) => f.group === 'mods' && f.modAffix === 'suffix')
+)
+const modOtherFilters = computed(() =>
+  filters.value.filter((f) => f.group === 'mods' && f.modAffix === undefined)
+)
 
 type ListingTooltipPos = { listing: TradeListingSummary; left: number; top: number; maxH: number }
 const listingTooltip = ref<ListingTooltipPos | null>(null)
@@ -275,8 +295,7 @@ function onFilterNumberInput(id: string, field: 'min' | 'max', raw: string): voi
   const f = list.find((x) => x.id === id)
   if (!f || f.value?.kind !== 'number') return
   const t = raw.trim()
-  const parsed: number | undefined =
-    t === '' || t === '-' ? undefined : Number(t)
+  const parsed: number | undefined = t === '' || t === '-' ? undefined : Number(t)
   if (parsed !== undefined && Number.isNaN(parsed)) return
   const prev = f.value
   f.value = {
@@ -291,7 +310,7 @@ const selectedFilters = computed(() => filters.value.filter((f) => selectedIds.v
 function toPlainSelectedFilters(list: TradeFilterOption[]): TradeFilterOption[] {
   return list.map((f) => {
     const rawF = toRaw(f) as TradeFilterOption
-    const rawV = rawF.value ? (toRaw(rawF.value) as TradeFilterOption['value']) : undefined
+    const rawV = rawF.value ? (toRaw(rawF.value) as TradeFilterValue) : undefined
     return {
       id: rawF.id,
       label: rawF.label,
@@ -299,7 +318,7 @@ function toPlainSelectedFilters(list: TradeFilterOption[]): TradeFilterOption[] 
       tradeId: rawF.tradeId,
       modAffix: rawF.modAffix,
       modSourceLine: rawF.modSourceLine,
-      value: rawV ? { ...(rawV as any) } : undefined
+      value: rawV ? { ...rawV } : undefined
     }
   })
 }
@@ -476,7 +495,6 @@ onUnmounted(() => {
 
 <template>
   <div class="app">
-
     <!-- ── HEADER ───────────────────────────────────────────────── -->
     <header class="appHeader">
       <div class="headerInner">
@@ -488,13 +506,18 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="headerActions">
-          <button type="button" class="iconBtn" @click="showSettings = true" title="Settings">
+          <button type="button" class="iconBtn" title="Settings" @click="showSettings = true">
             <span class="mi">settings</span>
           </button>
-          <button type="button" class="iconBtn" @click="onMinimizeWindow" title="Minimize">
+          <button type="button" class="iconBtn" title="Minimize" @click="onMinimizeWindow">
             <span class="mi">minimize</span>
           </button>
-          <button type="button" class="iconBtn iconBtnClose" @click="onCloseWindow" title="Close window">
+          <button
+            type="button"
+            class="iconBtn iconBtnClose"
+            title="Close window"
+            @click="onCloseWindow"
+          >
             <span class="mi">close</span>
           </button>
         </div>
@@ -506,9 +529,11 @@ onUnmounted(() => {
       <span class="mi statusBolt">bolt</span>
       <span class="statusText">
         <span v-if="tradeConnected === true" class="stConnected">Connected</span>
-        <span v-else-if="tradeConnected === false" class="stBad">Not connected — search may 403</span>
+        <span v-else-if="tradeConnected === false" class="stBad"
+          >Not connected — search may 403</span
+        >
         <span v-else class="stUnk">Trade status unknown</span>
-        <span class="stLeague" v-if="settings.league"> · {{ settings.league }}</span>
+        <span v-if="settings.league" class="stLeague"> · {{ settings.league }}</span>
       </span>
     </div>
 
@@ -518,233 +543,248 @@ onUnmounted(() => {
 
       <template v-if="parseResult">
         <div class="bodyLayout">
-        <!-- ── LEFT: Item card + filters ───────────────────────── -->
-        <aside class="itemSidebar">
-          <div class="filterToolbar">
-            <button
-              type="button"
-              class="btn btnPrimary"
-              :disabled="searching || selectedFilters.length === 0"
-              @click="onSearch"
-            >
-              <span class="mi btnIco">search_insights</span>
-              {{ searching ? 'Searching…' : 'Price Check' }}
-            </button>
-            <button
-              type="button"
-              class="btn btnGhost"
-              :disabled="parsing"
-              title="Replace item from clipboard (PoE: Ctrl+C on item first)"
-              @click="onImportFromClipboard"
-            >
-              <span class="mi btnIco">content_paste</span>
-              Import
-            </button>
-          </div>
-
-          <!-- Item header card -->
-          <div class="itemCard">
-            <div class="itemCardDecor" aria-hidden="true">
-              <span class="mi itemCardDecorIcon">{{ itemDecorativeIcon }}</span>
-            </div>
-            <div class="itemCardBody">
-              <h2 class="itemName">{{ parseResult.itemName || '—' }}</h2>
-              <p class="itemTypeLine">{{ parseResult.itemType || '' }}</p>
-              <div class="itemChips">
-                <span
-                  v-for="f in filters.filter(f => f.group === 'misc')"
-                  :key="f.id"
-                  class="chip chipCorrupted"
-                >Corrupted</span>
-                <span
-                  v-if="filters.find(f => f.tradeId === 'type_filters.rarity')?.value?.kind === 'text'"
-                  class="chip chipNormal"
-                >{{ (filters.find(f => f.tradeId === 'type_filters.rarity')?.value as any)?.text }}</span>
-                <span
-                  v-if="filters.find(f => f.tradeId === 'type_filters.category')"
-                  class="chip chipNormal"
-                >{{ (filters.find(f => f.tradeId === 'type_filters.category')?.label ?? '').replace('Item category: ', '').replace('Category: ', '') }}</span>
-              </div>
-            </div>
-          </div>
-
-          <!-- Filter sections -->
-          <div class="filterArea">
-
-            <div v-if="filterGroups.item?.length" class="filterSection">
-              <div class="filterSecHead">
-                <span class="filterSecLabel labelGold">Item Properties</span>
-              </div>
-              <ul class="filterList">
-                <EditableFilterRow
-                  v-for="f in filterGroups.item"
-                  :key="f.id"
-                  :filter="f"
-                  :selected="selectedIds.has(f.id)"
-                  bullet="gold"
-                  :slots="numberSlotsFor(f)"
-                  @toggle="toggleSelected"
-                  @num-input="onFilterNumberInput"
-                />
-              </ul>
+          <!-- ── LEFT: Item card + filters ───────────────────────── -->
+          <aside class="itemSidebar">
+            <div class="filterToolbar">
+              <button
+                type="button"
+                class="btn btnPrimary"
+                :disabled="searching || selectedFilters.length === 0"
+                @click="onSearch"
+              >
+                <span class="mi btnIco">search_insights</span>
+                {{ searching ? 'Searching…' : 'Price Check' }}
+              </button>
+              <button
+                type="button"
+                class="btn btnGhost"
+                :disabled="parsing"
+                title="Replace item from clipboard (PoE: Ctrl+C on item first)"
+                @click="onImportFromClipboard"
+              >
+                <span class="mi btnIco">content_paste</span>
+                Import
+              </button>
             </div>
 
-            <div v-if="filterGroups.requirements?.length" class="filterSection">
-              <div class="filterSecHead">
-                <span class="filterSecLabel labelMuted">Requirements</span>
+            <!-- Item header card -->
+            <div class="itemCard">
+              <div class="itemCardDecor" aria-hidden="true">
+                <span class="mi itemCardDecorIcon">{{ itemDecorativeIcon }}</span>
               </div>
-              <ul class="filterList">
-                <EditableFilterRow
-                  v-for="f in filterGroups.requirements"
-                  :key="f.id"
-                  :filter="f"
-                  :selected="selectedIds.has(f.id)"
-                  bullet="muted"
-                  :slots="numberSlotsFor(f)"
-                  @toggle="toggleSelected"
-                  @num-input="onFilterNumberInput"
-                />
-              </ul>
-            </div>
-
-            <div v-if="filterGroups.defences?.length" class="filterSection">
-              <div class="filterSecHead">
-                <span class="filterSecLabel labelGold">Defences</span>
-              </div>
-              <ul class="filterList">
-                <EditableFilterRow
-                  v-for="f in filterGroups.defences"
-                  :key="f.id"
-                  :filter="f"
-                  :selected="selectedIds.has(f.id)"
-                  bullet="gold"
-                  :slots="numberSlotsFor(f)"
-                  @toggle="toggleSelected"
-                  @num-input="onFilterNumberInput"
-                />
-              </ul>
-            </div>
-
-            <div v-if="modPrefixFilters.length" class="filterSection">
-              <div class="filterSecHead">
-                <span class="filterSecLabel labelPurple">Prefixes</span>
-              </div>
-              <ul class="filterList">
-                <EditableFilterRow
-                  v-for="f in modPrefixFilters"
-                  :key="f.id"
-                  :filter="f"
-                  :selected="selectedIds.has(f.id)"
-                  bullet="purple"
-                  :slots="numberSlotsFor(f)"
-                  @toggle="toggleSelected"
-                  @num-input="onFilterNumberInput"
-                />
-              </ul>
-            </div>
-
-            <div v-if="modSuffixFilters.length" class="filterSection">
-              <div class="filterSecHead">
-                <span class="filterSecLabel labelPurple">Suffixes</span>
-              </div>
-              <ul class="filterList">
-                <EditableFilterRow
-                  v-for="f in modSuffixFilters"
-                  :key="f.id"
-                  :filter="f"
-                  :selected="selectedIds.has(f.id)"
-                  bullet="purple"
-                  :slots="numberSlotsFor(f)"
-                  @toggle="toggleSelected"
-                  @num-input="onFilterNumberInput"
-                />
-              </ul>
-            </div>
-
-            <div v-if="modOtherFilters.length" class="filterSection">
-              <div class="filterSecHead">
-                <span class="filterSecLabel labelPurple">Modifiers</span>
-              </div>
-              <ul class="filterList">
-                <EditableFilterRow
-                  v-for="f in modOtherFilters"
-                  :key="f.id"
-                  :filter="f"
-                  :selected="selectedIds.has(f.id)"
-                  bullet="purple"
-                  :slots="numberSlotsFor(f)"
-                  @toggle="toggleSelected"
-                  @num-input="onFilterNumberInput"
-                />
-              </ul>
-            </div>
-
-          </div>
-        </aside>
-
-        <!-- ── RIGHT: Results ───────────────────────────────────── -->
-        <div class="resultsArea">
-          <div class="resultsHead">
-            <h3 class="resultsTitle">Recent Listings</h3>
-            <span class="resultsCount" v-if="results?.total !== undefined">
-              {{ results.total.toLocaleString() }} found &middot; {{ results.results.length }} shown
-              <span class="resultsSortHint"> · cheapest first</span>
-            </span>
-          </div>
-
-          <div v-if="results?.notice" class="resultsNotice">
-            <span class="mi noticeIco">info</span>
-            <span>{{ results.notice }}</span>
-          </div>
-
-          <div v-if="!results" class="emptyState">
-            <span class="mi emptyIco">search_insights</span>
-            <p>Click <strong>Price Check</strong> to search for similar listings.</p>
-          </div>
-
-          <div v-else-if="results.results.length === 0" class="emptyState">
-            <span class="mi emptyIco">sentiment_dissatisfied</span>
-            <p>No listings matched the selected filters.</p>
-          </div>
-
-          <div v-else class="listingList">
-            <div
-              v-for="r in results.results"
-              :key="r.id"
-              class="listingRow"
-              @mouseenter="onListingRowEnter(r, $event)"
-              @mouseleave="onListingRowLeave"
-            >
-              <div class="listingAccent"></div>
-
-              <div class="listingEye" aria-hidden="true" @mouseenter.stop="onListingEyeEnter(r, $event)">
-                <span class="eyeBtn">
-                  <span class="mi">visibility</span>
-                </span>
-              </div>
-
-              <!-- Info -->
-              <div class="listingInfo">
-                <p class="listingName">
-                  {{ (r.name && r.name.length ? r.name + ' ' : '') + (r.typeLine ?? '') }}
-                </p>
-                <div class="listingMeta">
-                  <span v-if="r.ilvl !== undefined">iLvl {{ r.ilvl }}</span>
-                  <span v-if="r.ilvl !== undefined && r.corrupted" class="metaSep">·</span>
-                  <span v-if="r.corrupted" class="metaCorrupted">Corrupted</span>
-                </div>
-              </div>
-
-              <!-- Price -->
-              <div class="listingRight">
-                <div v-if="r.price" class="priceBlock">
-                  <span class="priceAmt">{{ r.price.split(' ')[0] }}</span>
-                  <span class="priceCurr">{{ r.price.split(' ').slice(1).join(' ') }}</span>
+              <div class="itemCardBody">
+                <h2 class="itemName">{{ parseResult.itemName || '—' }}</h2>
+                <p class="itemTypeLine">{{ parseResult.itemType || '' }}</p>
+                <div class="itemChips">
+                  <span
+                    v-for="f in filters.filter((f) => f.group === 'misc')"
+                    :key="f.id"
+                    class="chip chipCorrupted"
+                    >Corrupted</span
+                  >
+                  <span
+                    v-if="
+                      filters.find((f) => f.tradeId === 'type_filters.rarity')?.value?.kind ===
+                      'text'
+                    "
+                    class="chip chipNormal"
+                    >{{
+                      (filters.find((f) => f.tradeId === 'type_filters.rarity')?.value as any)?.text
+                    }}</span
+                  >
+                  <span
+                    v-if="filters.find((f) => f.tradeId === 'type_filters.category')"
+                    class="chip chipNormal"
+                    >{{
+                      (filters.find((f) => f.tradeId === 'type_filters.category')?.label ?? '')
+                        .replace('Item category: ', '')
+                        .replace('Category: ', '')
+                    }}</span
+                  >
                 </div>
               </div>
             </div>
+
+            <!-- Filter sections -->
+            <div class="filterArea">
+              <div v-if="filterGroups.item?.length" class="filterSection">
+                <div class="filterSecHead">
+                  <span class="filterSecLabel labelGold">Item Properties</span>
+                </div>
+                <ul class="filterList">
+                  <EditableFilterRow
+                    v-for="f in filterGroups.item"
+                    :key="f.id"
+                    :filter="f"
+                    :selected="selectedIds.has(f.id)"
+                    bullet="gold"
+                    :slots="numberSlotsFor(f)"
+                    @toggle="toggleSelected"
+                    @num-input="onFilterNumberInput"
+                  />
+                </ul>
+              </div>
+
+              <div v-if="filterGroups.requirements?.length" class="filterSection">
+                <div class="filterSecHead">
+                  <span class="filterSecLabel labelMuted">Requirements</span>
+                </div>
+                <ul class="filterList">
+                  <EditableFilterRow
+                    v-for="f in filterGroups.requirements"
+                    :key="f.id"
+                    :filter="f"
+                    :selected="selectedIds.has(f.id)"
+                    bullet="muted"
+                    :slots="numberSlotsFor(f)"
+                    @toggle="toggleSelected"
+                    @num-input="onFilterNumberInput"
+                  />
+                </ul>
+              </div>
+
+              <div v-if="filterGroups.defences?.length" class="filterSection">
+                <div class="filterSecHead">
+                  <span class="filterSecLabel labelGold">Defences</span>
+                </div>
+                <ul class="filterList">
+                  <EditableFilterRow
+                    v-for="f in filterGroups.defences"
+                    :key="f.id"
+                    :filter="f"
+                    :selected="selectedIds.has(f.id)"
+                    bullet="gold"
+                    :slots="numberSlotsFor(f)"
+                    @toggle="toggleSelected"
+                    @num-input="onFilterNumberInput"
+                  />
+                </ul>
+              </div>
+
+              <div v-if="modPrefixFilters.length" class="filterSection">
+                <div class="filterSecHead">
+                  <span class="filterSecLabel labelPurple">Prefixes</span>
+                </div>
+                <ul class="filterList">
+                  <EditableFilterRow
+                    v-for="f in modPrefixFilters"
+                    :key="f.id"
+                    :filter="f"
+                    :selected="selectedIds.has(f.id)"
+                    bullet="purple"
+                    :slots="numberSlotsFor(f)"
+                    @toggle="toggleSelected"
+                    @num-input="onFilterNumberInput"
+                  />
+                </ul>
+              </div>
+
+              <div v-if="modSuffixFilters.length" class="filterSection">
+                <div class="filterSecHead">
+                  <span class="filterSecLabel labelPurple">Suffixes</span>
+                </div>
+                <ul class="filterList">
+                  <EditableFilterRow
+                    v-for="f in modSuffixFilters"
+                    :key="f.id"
+                    :filter="f"
+                    :selected="selectedIds.has(f.id)"
+                    bullet="purple"
+                    :slots="numberSlotsFor(f)"
+                    @toggle="toggleSelected"
+                    @num-input="onFilterNumberInput"
+                  />
+                </ul>
+              </div>
+
+              <div v-if="modOtherFilters.length" class="filterSection">
+                <div class="filterSecHead">
+                  <span class="filterSecLabel labelPurple">Modifiers</span>
+                </div>
+                <ul class="filterList">
+                  <EditableFilterRow
+                    v-for="f in modOtherFilters"
+                    :key="f.id"
+                    :filter="f"
+                    :selected="selectedIds.has(f.id)"
+                    bullet="purple"
+                    :slots="numberSlotsFor(f)"
+                    @toggle="toggleSelected"
+                    @num-input="onFilterNumberInput"
+                  />
+                </ul>
+              </div>
+            </div>
+          </aside>
+
+          <!-- ── RIGHT: Results ───────────────────────────────────── -->
+          <div class="resultsArea">
+            <div class="resultsHead">
+              <h3 class="resultsTitle">Recent Listings</h3>
+              <span v-if="results?.total !== undefined" class="resultsCount">
+                {{ results.total.toLocaleString() }} found &middot;
+                {{ results.results.length }} shown
+                <span class="resultsSortHint"> · cheapest first</span>
+              </span>
+            </div>
+
+            <div v-if="results?.notice" class="resultsNotice">
+              <span class="mi noticeIco">info</span>
+              <span>{{ results.notice }}</span>
+            </div>
+
+            <div v-if="!results" class="emptyState">
+              <span class="mi emptyIco">search_insights</span>
+              <p>Click <strong>Price Check</strong> to search for similar listings.</p>
+            </div>
+
+            <div v-else-if="results.results.length === 0" class="emptyState">
+              <span class="mi emptyIco">sentiment_dissatisfied</span>
+              <p>No listings matched the selected filters.</p>
+            </div>
+
+            <div v-else class="listingList">
+              <div
+                v-for="r in results.results"
+                :key="r.id"
+                class="listingRow"
+                @mouseenter="onListingRowEnter(r, $event)"
+                @mouseleave="onListingRowLeave"
+              >
+                <div class="listingAccent"></div>
+
+                <div
+                  class="listingEye"
+                  aria-hidden="true"
+                  @mouseenter.stop="onListingEyeEnter(r, $event)"
+                >
+                  <span class="eyeBtn">
+                    <span class="mi">visibility</span>
+                  </span>
+                </div>
+
+                <!-- Info -->
+                <div class="listingInfo">
+                  <p class="listingName">
+                    {{ (r.name && r.name.length ? r.name + ' ' : '') + (r.typeLine ?? '') }}
+                  </p>
+                  <div class="listingMeta">
+                    <span v-if="r.ilvl !== undefined">iLvl {{ r.ilvl }}</span>
+                    <span v-if="r.ilvl !== undefined && r.corrupted" class="metaSep">·</span>
+                    <span v-if="r.corrupted" class="metaCorrupted">Corrupted</span>
+                  </div>
+                </div>
+
+                <!-- Price -->
+                <div class="listingRight">
+                  <div v-if="r.price" class="priceBlock">
+                    <span class="priceAmt">{{ r.price.split(' ')[0] }}</span>
+                    <span class="priceCurr">{{ r.price.split(' ').slice(1).join(' ') }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
         </div>
       </template>
 
@@ -754,16 +794,21 @@ onUnmounted(() => {
           <h3 class="importOnlyTitle">Load an item</h3>
           <p class="importOnlyText">
             <template v-if="grabItemHotkeyDisplay">
-              Press <code class="kbdHint">{{ grabItemHotkeyDisplay }}</code> in Path of Exile with the item under the
-              cursor to copy its data here, or import from the clipboard.
+              Press <code class="kbdHint">{{ grabItemHotkeyDisplay }}</code> in Path of Exile with
+              the item under the cursor to copy its data here, or import from the clipboard.
             </template>
             <template v-else>
-              Set a grab hotkey in Settings, then press it in PoE with the item under the cursor, or import from the
-              clipboard.
+              Set a grab hotkey in Settings, then press it in PoE with the item under the cursor, or
+              import from the clipboard.
             </template>
           </p>
           <div class="importOnlyActions">
-            <button type="button" class="btn btnPrimary" :disabled="parsing" @click="onImportFromClipboard">
+            <button
+              type="button"
+              class="btn btnPrimary"
+              :disabled="parsing"
+              @click="onImportFromClipboard"
+            >
               <span class="mi btnIco">content_paste</span>
               Import from clipboard
             </button>
@@ -792,11 +837,25 @@ onUnmounted(() => {
           <div class="connRow">
             <span
               class="connBadge"
-              :class="tradeConnected === true ? 'connOk' : tradeConnected === false ? 'connBad' : 'connUnk'"
+              :class="
+                tradeConnected === true
+                  ? 'connOk'
+                  : tradeConnected === false
+                    ? 'connBad'
+                    : 'connUnk'
+              "
             >
-              {{ tradeConnected === true ? 'Connected' : tradeConnected === false ? 'Not connected' : 'Unknown' }}
+              {{
+                tradeConnected === true
+                  ? 'Connected'
+                  : tradeConnected === false
+                    ? 'Not connected'
+                    : 'Unknown'
+              }}
             </span>
-            <span class="connHint" v-if="tradeConnected === false">Search may 403 until connected</span>
+            <span v-if="tradeConnected === false" class="connHint"
+              >Search may 403 until connected</span
+            >
           </div>
           <div class="settingsActions">
             <button class="btn btnSecondary" :disabled="connecting" @click="onConnect">
@@ -805,7 +864,6 @@ onUnmounted(() => {
             </button>
             <button class="btn btnGhost" @click="refreshTradeStatus">Refresh</button>
           </div>
-          
         </div>
 
         <!-- League -->
@@ -826,22 +884,31 @@ onUnmounted(() => {
           </div>
           <div v-if="leagueSelectValue === '__custom__'" class="settingsSubField">
             <label class="settingsSubLabel">Custom league name</label>
-            <input v-model="customLeague" class="settingsInput" placeholder="e.g. Fate of the Vaal" />
+            <input
+              v-model="customLeague"
+              class="settingsInput"
+              placeholder="e.g. Fate of the Vaal"
+            />
           </div>
         </div>
 
         <!-- Base URL -->
         <div class="settingsBlock">
           <div class="settingsBlockLabel">Trade Base URL</div>
-          <input v-model="baseUrl" class="settingsInput" placeholder="https://www.pathofexile.com" />
+          <input
+            v-model="baseUrl"
+            class="settingsInput"
+            placeholder="https://www.pathofexile.com"
+          />
         </div>
 
         <!-- Grab item: global hotkey -->
         <div class="settingsBlock">
           <div class="settingsBlockLabel">Grab item from game</div>
           <p class="settingsHint settingsHintTight">
-            Press <code class="kbdHint">{{ grabItemHotkeyLabel }}</code> in PoE with an item highlighted to copy its
-            data into this app (clipboard is restored). <strong>Change</strong> records a new key; 
+            Press <code class="kbdHint">{{ grabItemHotkeyLabel }}</code> in PoE with an item
+            highlighted to copy its data into this app (clipboard is restored).
+            <strong>Change</strong> records a new key;
           </p>
           <label class="settingsSubLabel" for="overlayAccInput">Current keybind</label>
           <div class="accelRow">
@@ -853,7 +920,11 @@ onUnmounted(() => {
               spellcheck="false"
               autocomplete="off"
             />
-            <button type="button" class="btn btnSecondary accelChangeBtn" @click="startRecordingKeybind">
+            <button
+              type="button"
+              class="btn btnSecondary accelChangeBtn"
+              @click="startRecordingKeybind"
+            >
               Change
             </button>
           </div>
@@ -864,11 +935,12 @@ onUnmounted(() => {
         <div class="settingsBlock">
           <div class="settingsBlockLabel">Item Stats on Hover</div>
           <label class="toggleRow">
-            <input type="checkbox" v-model="showItemStatsOnHover" class="toggleCheck" />
+            <input v-model="showItemStatsOnHover" type="checkbox" class="toggleCheck" />
             <span class="toggleLabel">Show item stats when hovering a result</span>
           </label>
         </div>
 
+        <p class="settingsFooter">© 2026 | Bor Novak</p>
       </div>
     </div>
 
@@ -891,11 +963,13 @@ onUnmounted(() => {
         >
           <h3 id="keybindRecordTitle" class="keybindRecorderTitle">Press new keybind</h3>
           <p class="keybindRecorderHint">
-            Current: <code class="kbdHint">{{ grabItemHotkeyLabel }}</code>. Hold
-            <strong>Ctrl</strong> (Windows) or <strong>Cmd</strong> (Mac), optional Shift/Alt, then the final key.
-            <strong>Esc</strong> cancels.
+            Current: <code class="kbdHint">{{ grabItemHotkeyLabel }}</code
+            >. Hold <strong>Ctrl</strong> (Windows) or <strong>Cmd</strong> (Mac), optional
+            Shift/Alt, then the final key. <strong>Esc</strong> cancels.
           </p>
-          <p v-if="keybindRecordError" class="settingsError keybindRecorderErr">{{ keybindRecordError }}</p>
+          <p v-if="keybindRecordError" class="settingsError keybindRecorderErr">
+            {{ keybindRecordError }}
+          </p>
           <button type="button" class="btn btnGhost" @click="stopRecordingKeybind">Cancel</button>
         </div>
       </div>
@@ -930,7 +1004,9 @@ onUnmounted(() => {
                 class="ttRow"
               >
                 <span class="ttKey">{{ line.split(':')[0] }}</span>
-                <span class="ttVal">{{ line.includes(':') ? line.split(':').slice(1).join(':').trim() : '' }}</span>
+                <span class="ttVal">{{
+                  line.includes(':') ? line.split(':').slice(1).join(':').trim() : ''
+                }}</span>
               </div>
             </div>
             <div v-if="listingTooltip.listing.stats.requirements?.length" class="ttSection">
@@ -939,7 +1015,9 @@ onUnmounted(() => {
                 v-for="(line, i) in listingTooltip.listing.stats.requirements"
                 :key="'r' + i"
                 class="ttRow"
-              >{{ line }}</div>
+              >
+                {{ line }}
+              </div>
             </div>
             <div v-if="listingTooltip.listing.stats.implicitMods?.length" class="ttSection">
               <div class="ttSLabel">Implicit</div>
@@ -947,7 +1025,9 @@ onUnmounted(() => {
                 v-for="(line, i) in listingTooltip.listing.stats.implicitMods"
                 :key="'im' + i"
                 class="ttMod ttImplicit"
-              >{{ line }}</div>
+              >
+                {{ line }}
+              </div>
             </div>
             <div v-if="listingTooltip.listing.stats.runeMods?.length" class="ttSection">
               <div class="ttSLabel">Runes / augments</div>
@@ -955,7 +1035,9 @@ onUnmounted(() => {
                 v-for="(line, i) in listingTooltip.listing.stats.runeMods"
                 :key="'run' + i"
                 class="ttMod ttRune"
-              >{{ line }}</div>
+              >
+                {{ line }}
+              </div>
             </div>
             <div v-if="listingTooltip.listing.stats.explicitMods?.length" class="ttSection">
               <div class="ttSLabel">Explicit</div>
@@ -963,35 +1045,42 @@ onUnmounted(() => {
                 v-for="(line, i) in listingTooltip.listing.stats.explicitMods"
                 :key="'ex' + i"
                 class="ttMod"
-              >{{ line }}</div>
+              >
+                {{ line }}
+              </div>
             </div>
             <div v-if="listingTooltip.listing.stats.craftedMods?.length" class="ttSection">
               <div
                 v-for="(line, i) in listingTooltip.listing.stats.craftedMods"
                 :key="'cr' + i"
                 class="ttMod ttCrafted"
-              >{{ line }}</div>
+              >
+                {{ line }}
+              </div>
             </div>
             <div v-if="listingTooltip.listing.stats.enchantMods?.length" class="ttSection">
               <div
                 v-for="(line, i) in listingTooltip.listing.stats.enchantMods"
                 :key="'en' + i"
                 class="ttMod ttEnchant"
-              >{{ line }}</div>
+              >
+                {{ line }}
+              </div>
             </div>
             <div v-if="listingTooltip.listing.stats.fracturedMods?.length" class="ttSection">
               <div
                 v-for="(line, i) in listingTooltip.listing.stats.fracturedMods"
                 :key="'fr' + i"
                 class="ttMod ttFractured"
-              >{{ line }}</div>
+              >
+                {{ line }}
+              </div>
             </div>
             <div v-if="listingTooltip.listing.stats.corrupted" class="ttCorrupted">Corrupted</div>
           </div>
         </template>
       </div>
     </Teleport>
-
   </div>
 </template>
 
@@ -1030,7 +1119,11 @@ onUnmounted(() => {
 /* ─── Material Symbols ──────────────────────────────────────────── */
 .mi {
   font-family: 'Material Symbols Outlined';
-  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  font-variation-settings:
+    'FILL' 0,
+    'wght' 400,
+    'GRAD' 0,
+    'opsz' 24;
   font-size: 20px;
   line-height: 1;
   display: inline-block;
@@ -1040,9 +1133,16 @@ onUnmounted(() => {
 }
 
 /* ─── Scrollbar ─────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 4px; height: 4px; }
-::-webkit-scrollbar-track { background: var(--s0); }
-::-webkit-scrollbar-thumb { background: var(--gold); }
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--s0);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--gold);
+}
 
 /* ─── Header ─────────────────────────────────────────────────────── */
 .appHeader {
@@ -1109,7 +1209,9 @@ onUnmounted(() => {
   transition: color 0.15s;
   border-radius: 2px;
 }
-.iconBtn:hover { color: var(--gold); }
+.iconBtn:hover {
+  color: var(--gold);
+}
 .iconBtnClose:hover {
   color: var(--error);
 }
@@ -1128,11 +1230,21 @@ onUnmounted(() => {
   color: var(--text-dim);
   border-top: 1px solid rgba(77, 70, 57, 0.15);
 }
-.statusBolt { font-size: 14px; }
-.stConnected { color: rgba(90, 220, 150, 0.85); }
-.stBad { color: var(--error); }
-.stUnk { color: var(--text-dim); }
-.stLeague { color: var(--gold); }
+.statusBolt {
+  font-size: 14px;
+}
+.stConnected {
+  color: rgba(90, 220, 150, 0.85);
+}
+.stBad {
+  color: var(--error);
+}
+.stUnk {
+  color: var(--text-dim);
+}
+.stLeague {
+  color: var(--gold);
+}
 
 /* ─── Main layout ───────────────────────────────────────────────── */
 .mainWrap {
@@ -1286,30 +1398,46 @@ onUnmounted(() => {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   padding: 10px 18px;
-  transition: background 0.15s, box-shadow 0.15s;
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
   border-radius: 2px;
   white-space: nowrap;
 }
-.btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.btn:active:not(:disabled) { background: var(--s0) !important; }
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn:active:not(:disabled) {
+  background: var(--s0) !important;
+}
 .btnPrimary {
   background: var(--gold);
   color: #3a2600;
 }
-.btnPrimary:hover:not(:disabled) { background: #f0cc84; }
+.btnPrimary:hover:not(:disabled) {
+  background: #f0cc84;
+}
 .btnSecondary {
   background: var(--s4);
   color: var(--text);
   box-shadow: inset 0 0 0 1px rgba(231, 193, 120, 0.2);
 }
-.btnSecondary:hover:not(:disabled) { background: var(--s5); }
+.btnSecondary:hover:not(:disabled) {
+  background: var(--s5);
+}
 .btnGhost {
   background: transparent;
   color: var(--text-dim);
   box-shadow: inset 0 0 0 1px rgba(77, 70, 57, 0.45);
 }
-.btnGhost:hover:not(:disabled) { color: var(--gold); box-shadow: inset 0 0 0 1px rgba(231, 193, 120, 0.3); }
-.btnIco { font-size: 15px; }
+.btnGhost:hover:not(:disabled) {
+  color: var(--gold);
+  box-shadow: inset 0 0 0 1px rgba(231, 193, 120, 0.3);
+}
+.btnIco {
+  font-size: 15px;
+}
 
 /* ─── Body layout ───────────────────────────────────────────────── */
 .bodyLayout {
@@ -1346,7 +1474,9 @@ onUnmounted(() => {
   font-size: 108px;
   color: var(--gold);
 }
-.itemCardBody { position: relative; }
+.itemCardBody {
+  position: relative;
+}
 .itemName {
   font-family: 'Newsreader', serif;
   font-size: 22px;
@@ -1378,11 +1508,21 @@ onUnmounted(() => {
   text-transform: uppercase;
   border-radius: 2px;
 }
-.chipNormal { background: var(--s4); color: var(--text); }
-.chipCorrupted { background: var(--purple-bg); color: var(--purple-on); }
+.chipNormal {
+  background: var(--s4);
+  color: var(--text);
+}
+.chipCorrupted {
+  background: var(--purple-bg);
+  color: var(--purple-on);
+}
 
 /* ─── Filter area ───────────────────────────────────────────────── */
-.filterArea { display: flex; flex-direction: column; gap: 8px; }
+.filterArea {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 
 .filterSection {
   background: var(--s1);
@@ -1399,9 +1539,15 @@ onUnmounted(() => {
   text-transform: uppercase;
   letter-spacing: 0.22em;
 }
-.labelGold { color: var(--gold); }
-.labelPurple { color: var(--purple); }
-.labelMuted { color: var(--text-dim); }
+.labelGold {
+  color: var(--gold);
+}
+.labelPurple {
+  color: var(--purple);
+}
+.labelMuted {
+  color: var(--text-dim);
+}
 
 .filterList {
   list-style: none;
@@ -1413,7 +1559,10 @@ onUnmounted(() => {
 }
 
 /* ─── Results area ──────────────────────────────────────────────── */
-.resultsArea { display: flex; flex-direction: column; }
+.resultsArea {
+  display: flex;
+  flex-direction: column;
+}
 
 .resultsHead {
   display: flex;
@@ -1473,11 +1622,20 @@ onUnmounted(() => {
   font-size: 13px;
   text-align: center;
 }
-.emptyIco { font-size: 42px; opacity: 0.25; }
-.emptyState strong { color: var(--gold); }
+.emptyIco {
+  font-size: 42px;
+  opacity: 0.25;
+}
+.emptyState strong {
+  color: var(--gold);
+}
 
 /* ─── Listing rows ──────────────────────────────────────────────── */
-.listingList { display: flex; flex-direction: column; overflow: visible; }
+.listingList {
+  display: flex;
+  flex-direction: column;
+  overflow: visible;
+}
 
 .listingRow {
   position: relative;
@@ -1490,16 +1648,22 @@ onUnmounted(() => {
   transition: background 0.2s;
   overflow: visible;
 }
-.listingRow:hover { background: var(--s3); }
+.listingRow:hover {
+  background: var(--s3);
+}
 
 .listingAccent {
   position: absolute;
-  left: 0; top: 0; bottom: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
   width: 0;
   background: var(--gold);
   transition: width 0.2s;
 }
-.listingRow:hover .listingAccent { width: 2px; }
+.listingRow:hover .listingAccent {
+  width: 2px;
+}
 
 /* ─── Eye (decorative) + floating tooltip (teleported to body) ─── */
 .listingEye {
@@ -1593,7 +1757,9 @@ onUnmounted(() => {
   word-break: break-word;
   overflow-wrap: anywhere;
 }
-.ttKey { flex-shrink: 0; }
+.ttKey {
+  flex-shrink: 0;
+}
 .ttVal {
   color: var(--text);
   font-weight: 600;
@@ -1610,11 +1776,21 @@ onUnmounted(() => {
   overflow-wrap: anywhere;
   white-space: normal;
 }
-.ttImplicit { color: rgba(140, 200, 255, 0.9); }
-.ttRune { color: rgba(200, 220, 160, 0.92); }
-.ttCrafted { color: rgba(130, 255, 170, 0.9); }
-.ttFractured { color: rgba(255, 210, 140, 0.9); }
-.ttEnchant { color: rgba(255, 170, 255, 0.9); }
+.ttImplicit {
+  color: rgba(140, 200, 255, 0.9);
+}
+.ttRune {
+  color: rgba(200, 220, 160, 0.92);
+}
+.ttCrafted {
+  color: rgba(130, 255, 170, 0.9);
+}
+.ttFractured {
+  color: rgba(255, 210, 140, 0.9);
+}
+.ttEnchant {
+  color: rgba(255, 170, 255, 0.9);
+}
 .ttCorrupted {
   margin-top: 12px;
   font-size: 12px;
@@ -1625,7 +1801,10 @@ onUnmounted(() => {
 }
 
 /* ─── Listing info ──────────────────────────────────────────────── */
-.listingInfo { flex: 1; min-width: 0; }
+.listingInfo {
+  flex: 1;
+  min-width: 0;
+}
 .listingName {
   font-size: 13px;
   font-weight: 600;
@@ -1645,8 +1824,13 @@ onUnmounted(() => {
   align-items: center;
   flex-wrap: wrap;
 }
-.metaSep { opacity: 0.45; }
-.metaCorrupted { color: var(--purple); font-weight: 700; }
+.metaSep {
+  opacity: 0.45;
+}
+.metaCorrupted {
+  color: var(--purple);
+  font-weight: 700;
+}
 
 /* ─── Price ─────────────────────────────────────────────────────── */
 .listingRight {
@@ -1691,7 +1875,9 @@ onUnmounted(() => {
 .modal {
   width: min(580px, 100%);
   background: var(--s1);
-  box-shadow: 0 40px 80px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(231, 193, 120, 0.08);
+  box-shadow:
+    0 40px 80px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(231, 193, 120, 0.08);
   display: flex;
   flex-direction: column;
 }
@@ -1717,7 +1903,18 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 10px;
 }
-.settingsBlock:last-child { border-bottom: none; }
+.settingsBlock:last-of-type {
+  border-bottom: none;
+}
+.settingsFooter {
+  margin: 0;
+  padding: 14px 22px 20px;
+  font-size: 11px;
+  color: var(--text-dim);
+  text-align: center;
+  letter-spacing: 0.06em;
+  border-top: 1px solid rgba(77, 70, 57, 0.08);
+}
 .settingsBlockLabel {
   font-size: 9px;
   font-weight: 700;
@@ -1739,13 +1936,30 @@ onUnmounted(() => {
   letter-spacing: 0.1em;
   border-radius: 2px;
 }
-.connOk { background: rgba(90, 220, 150, 0.1); color: rgba(90, 220, 150, 0.9); }
-.connBad { background: rgba(255, 138, 138, 0.1); color: rgba(255, 138, 138, 0.9); }
-.connUnk { background: var(--s4); color: var(--text-dim); }
-.connHint { font-size: 11px; color: var(--text-dim); }
-.settingsActions { display: flex; gap: 10px; flex-wrap: wrap; }
+.connOk {
+  background: rgba(90, 220, 150, 0.1);
+  color: rgba(90, 220, 150, 0.9);
+}
+.connBad {
+  background: rgba(255, 138, 138, 0.1);
+  color: rgba(255, 138, 138, 0.9);
+}
+.connUnk {
+  background: var(--s4);
+  color: var(--text-dim);
+}
+.connHint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.settingsActions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
 
-.cookieDet { }
+.cookieDet {
+}
 .cookieSum {
   font-size: 10px;
   text-transform: uppercase;
@@ -1763,7 +1977,11 @@ onUnmounted(() => {
   border-radius: 2px;
 }
 
-.leagueRow { display: flex; gap: 8px; align-items: center; }
+.leagueRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
 .settingsSelect,
 .settingsInput {
   flex: 1;
@@ -1780,10 +1998,20 @@ onUnmounted(() => {
   box-sizing: border-box;
 }
 .settingsSelect:focus,
-.settingsInput:focus { background: var(--s3); }
-.settingsSelect option { background: var(--s2); }
-.settingsError { font-size: 11px; color: var(--error); }
-.settingsHint { font-size: 11px; color: var(--text-dim); }
+.settingsInput:focus {
+  background: var(--s3);
+}
+.settingsSelect option {
+  background: var(--s2);
+}
+.settingsError {
+  font-size: 11px;
+  color: var(--error);
+}
+.settingsHint {
+  font-size: 11px;
+  color: var(--text-dim);
+}
 .settingsHintTight {
   margin: 0 0 10px;
   line-height: 1.45;
@@ -1796,7 +2024,11 @@ onUnmounted(() => {
 .settingsLink:hover {
   color: var(--gold-dim);
 }
-.settingsSubField { display: flex; flex-direction: column; gap: 5px; }
+.settingsSubField {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
 .settingsSubLabel {
   font-size: 10px;
   letter-spacing: 0.12em;
@@ -1814,7 +2046,9 @@ onUnmounted(() => {
   border-radius: 2px;
   transition: background 0.15s;
 }
-.toggleRow:hover { background: var(--s3); }
+.toggleRow:hover {
+  background: var(--s3);
+}
 .toggleCheck {
   appearance: none;
   -webkit-appearance: none;
@@ -1825,15 +2059,29 @@ onUnmounted(() => {
   flex-shrink: 0;
   cursor: pointer;
   border-radius: 2px;
-  transition: background 0.15s, border-color 0.15s;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
 }
-.toggleCheck:checked { background: var(--gold); border-color: var(--gold); }
-.toggleLabel { font-size: 12px; color: var(--text-dim); }
-.toggleRow:hover .toggleLabel { color: var(--text); }
+.toggleCheck:checked {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.toggleLabel {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.toggleRow:hover .toggleLabel {
+  color: var(--text);
+}
 
 /* ─── Responsive ────────────────────────────────────────────────── */
 @media (max-width: 860px) {
-  .bodyLayout { grid-template-columns: 1fr; }
-  .mainWrap { padding: 24px 16px 80px; }
+  .bodyLayout {
+    grid-template-columns: 1fr;
+  }
+  .mainWrap {
+    padding: 24px 16px 80px;
+  }
 }
 </style>

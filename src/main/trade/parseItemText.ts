@@ -284,7 +284,12 @@ export function parseItemText(text: string): ParseItemTextResponse {
   for (const line of lines) {
     // Skip structural / header lines common in clipboard text
     if (/^--------$/.test(line)) continue
-    if (/^(rarity:|item class:|item level:|quality:|requires level|armour:|evasion rating:|energy shield:)/i.test(line)) continue
+    if (
+      /^(rarity:|item class:|item level:|quality:|requires level|armour:|evasion rating:|energy shield:)/i.test(
+        line
+      )
+    )
+      continue
 
     if (/^\{?\s*prefix\s+modifier\b/i.test(line)) {
       affixSection = 'prefix'
@@ -363,9 +368,18 @@ export function parseItemText(text: string): ParseItemTextResponse {
     }
 
     // Heuristic: mod lines often start with +, -, or a number.
-    if (/^[+\-]?\d/.test(line) || /^[+\-]\d/.test(line) || line.includes('%') || line.includes('to ')) {
+    if (
+      /^[-+]?\d/.test(line) ||
+      /^[-+]\d/.test(line) ||
+      line.includes('%') ||
+      line.includes('to ')
+    ) {
       const roll = parseModNumber(line)
-      const id = `mod:${line.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)}`
+      const id = `mod:${line
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 60)}`
       if (roll !== undefined) {
         filters.push({
           id,
@@ -403,4 +417,3 @@ export function parseItemText(text: string): ParseItemTextResponse {
   })
   return { itemName, itemType, filters: deduped }
 }
-
