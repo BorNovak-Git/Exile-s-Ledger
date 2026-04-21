@@ -1,0 +1,10 @@
+POE trade tool issues
+
+-remove text area so you will only see the mods and results
+-modifty the settings menu
+-figure out how to make the version auto update
+
+FUTURE:
+
+-add another tab to the app to inlcude a search feture for items 
+	-add a save button to save the searched params in a tab so user can quiclky get back to the serached item
