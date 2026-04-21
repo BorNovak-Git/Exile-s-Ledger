@@ -24,6 +24,10 @@ const api = {
     status: (baseUrl?: string): Promise<{ connected: boolean; cookies: string[] } | ApiErrorShape> => {
       console.log('[preload] invoke trade:status', { baseUrl })
       return ipcRenderer.invoke('trade:status', baseUrl)
+    },
+    listLeagues: (baseUrl?: string): Promise<{ leagues: string[] } | ApiErrorShape> => {
+      console.log('[preload] invoke trade:listLeagues', { baseUrl })
+      return ipcRenderer.invoke('trade:listLeagues', baseUrl)
     }
   }
 }

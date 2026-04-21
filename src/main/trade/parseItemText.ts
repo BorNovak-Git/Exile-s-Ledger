@@ -39,9 +39,91 @@ function parseItemClass(lines: string[]): string | undefined {
   return ln.split(':', 2)[1]?.trim()
 }
 
+/**
+ * Maps in-game `Item Class:` text to PoE2 trade `type_filters.category` option ids
+ * (see https://www.pathofexile.com/api/trade2/data/filters?realm=poe2).
+ */
 function poe2CategoryFromItemClass(itemClass: string | undefined): string | undefined {
-  const c = (itemClass ?? '').toLowerCase()
-  if (c === 'boots') return 'armour.boots'
+  const raw = (itemClass ?? '').trim()
+  if (!raw) return undefined
+  const n = raw.toLowerCase().replace(/\s+/g, ' ')
+
+  const exact: Record<string, string> = {
+    boots: 'armour.boots',
+    gloves: 'armour.gloves',
+    helmet: 'armour.helmet',
+    helmets: 'armour.helmet',
+    'body armour': 'armour.chest',
+    'body armours': 'armour.chest',
+    shield: 'armour.shield',
+    shields: 'armour.shield',
+    buckler: 'armour.buckler',
+    bucklers: 'armour.buckler',
+    focus: 'armour.focus',
+    foci: 'armour.focus',
+    quiver: 'armour.quiver',
+    quivers: 'armour.quiver',
+    sceptre: 'weapon.sceptre',
+    sceptres: 'weapon.sceptre',
+    wand: 'weapon.wand',
+    wands: 'weapon.wand',
+    staff: 'weapon.staff',
+    staves: 'weapon.staff',
+    bow: 'weapon.bow',
+    bows: 'weapon.bow',
+    crossbow: 'weapon.crossbow',
+    crossbows: 'weapon.crossbow',
+    claw: 'weapon.claw',
+    claws: 'weapon.claw',
+    dagger: 'weapon.dagger',
+    daggers: 'weapon.dagger',
+    spear: 'weapon.spear',
+    spears: 'weapon.spear',
+    flail: 'weapon.flail',
+    flails: 'weapon.flail',
+    talisman: 'weapon.talisman',
+    talismans: 'weapon.talisman',
+    ring: 'accessory.ring',
+    rings: 'accessory.ring',
+    amulet: 'accessory.amulet',
+    amulets: 'accessory.amulet',
+    belt: 'accessory.belt',
+    belts: 'accessory.belt',
+    'life flask': 'flask.life',
+    'life flasks': 'flask.life',
+    'mana flask': 'flask.mana',
+    'mana flasks': 'flask.mana',
+    jewel: 'jewel',
+    jewels: 'jewel',
+    'fishing rod': 'weapon.rod',
+    'fishing rods': 'weapon.rod',
+    quarterstaff: 'weapon.warstaff',
+    quarterstaves: 'weapon.warstaff',
+    warstaff: 'weapon.warstaff',
+    warstaves: 'weapon.warstaff'
+  }
+  if (exact[n]) return exact[n]
+
+  if (n.includes('quarter')) return 'weapon.warstaff'
+  if (n.includes('sceptre')) return 'weapon.sceptre'
+  if (n.includes('fishing')) return 'weapon.rod'
+
+  if (n.includes('two hand') || n.includes('two-hand')) {
+    if (n.includes('sword')) return 'weapon.twosword'
+    if (n.includes('axe')) return 'weapon.twoaxe'
+    if (n.includes('mace')) return 'weapon.twomace'
+  }
+  if (n.includes('one hand') || n.includes('one-hand')) {
+    if (n.includes('sword')) return 'weapon.onesword'
+    if (n.includes('axe')) return 'weapon.oneaxe'
+    if (n.includes('mace')) return 'weapon.onemace'
+  }
+
+  if (n.includes('warstaff')) return 'weapon.warstaff'
+  if (n.includes('staff') || n.includes('stave')) return 'weapon.staff'
+
+  if (n.includes('waystone')) return 'map.waystone'
+
   return undefined
 }
 
@@ -102,7 +184,7 @@ export function parseItemText(text: string): ParseItemTextResponse {
   if (category) {
     filters.push({
       id: `category:${category}`,
-      label: `Category: ${category}`,
+      label: itemClass ? `Item category: ${itemClass}` : `Category: ${category}`,
       group: 'item',
       tradeId: 'type_filters.category',
       value: { kind: 'text', text: category }
@@ -115,7 +197,13 @@ export function parseItemText(text: string): ParseItemTextResponse {
   pushIfDefined(
     filters,
     ilvl !== undefined
-      ? { id: 'itemLevel', label: `Item level >= ${ilvl}`, group: 'item', value: { kind: 'number', min: ilvl } }
+      ? {
+          id: 'itemLevel',
+          label: `Item level ${ilvl}`,
+          group: 'item',
+          tradeId: 'type_filters.ilvl',
+          value: { kind: 'number', min: ilvl }
+        }
       : undefined
   )
 
@@ -124,7 +212,13 @@ export function parseItemText(text: string): ParseItemTextResponse {
   pushIfDefined(
     filters,
     quality !== undefined
-      ? { id: 'quality', label: `Quality >= ${quality}`, group: 'item', value: { kind: 'number', min: quality } }
+      ? {
+          id: 'quality',
+          label: `Quality ~${quality} (similar)`,
+          group: 'item',
+          tradeId: 'type_filters.quality',
+          value: { kind: 'number', min: quality }
+        }
       : undefined
   )
 
@@ -135,8 +229,9 @@ export function parseItemText(text: string): ParseItemTextResponse {
     reqLevel !== undefined
       ? {
           id: 'requiresLevel',
-          label: `Requires level <= ${reqLevel}`,
+          label: `Character level required ≤ ${reqLevel}`,
           group: 'requirements',
+          tradeId: 'req_filters.lvl',
           value: { kind: 'number', max: reqLevel }
         }
       : undefined
@@ -159,10 +254,12 @@ export function parseItemText(text: string): ParseItemTextResponse {
     }
 
     const id = key === 'Armour:' ? 'armour' : 'evasion'
+    const tradeId = key === 'Armour:' ? 'equipment_filters.ar' : 'equipment_filters.ev'
     filters.push({
       id,
-      label: `${key.replace(':', '')} >= ${val}`,
+      label: `${key.replace(':', '')} ~${val} (similar)`,
       group: 'defences',
+      tradeId,
       value: { kind: 'number', min: val }
     })
   }
@@ -179,13 +276,40 @@ export function parseItemText(text: string): ParseItemTextResponse {
   }
 
   // Mods: very loose extraction (prototype).
-  // Keep original mod text as "term" candidate; later you can map these to trade stat ids.
+  // Advanced copy uses Prefix/Suffix Modifier lines — track for UI grouping.
+  let affixSection: 'prefix' | 'suffix' | undefined
+  const modMeta = (): { modAffix?: 'prefix' | 'suffix' } =>
+    affixSection !== undefined ? { modAffix: affixSection } : {}
+
   for (const line of lines) {
     // Skip structural / header lines common in clipboard text
     if (/^--------$/.test(line)) continue
     if (/^(rarity:|item class:|item level:|quality:|requires level|armour:|evasion rating:|energy shield:)/i.test(line)) continue
+
+    if (/^\{?\s*prefix\s+modifier\b/i.test(line)) {
+      affixSection = 'prefix'
+      continue
+    }
+    if (/^\{?\s*suffix\s+modifier\b/i.test(line)) {
+      affixSection = 'suffix'
+      continue
+    }
+    if (/^prefix modifiers?$/i.test(line) || /^prefixes?$/i.test(line)) {
+      affixSection = 'prefix'
+      continue
+    }
+    if (/^suffix modifiers?$/i.test(line) || /^suffixes?$/i.test(line)) {
+      affixSection = 'suffix'
+      continue
+    }
     if (/^corrupted$/i.test(line)) {
-      filters.push({ id: 'corrupted', label: 'Corrupted', group: 'misc' })
+      filters.push({
+        id: 'corrupted',
+        label: 'Corrupted',
+        group: 'misc',
+        tradeId: 'misc_filters.corrupted',
+        value: { kind: 'text', text: 'true' }
+      })
       continue
     }
 
@@ -199,7 +323,8 @@ export function parseItemText(text: string): ParseItemTextResponse {
           label: `${n}% increased Movement Speed`,
           group: 'mods',
           tradeId: 'pseudo.pseudo_increased_movement_speed',
-          value: { kind: 'number', min: n }
+          value: { kind: 'number', min: n },
+          ...modMeta()
         })
         continue
       }
@@ -214,7 +339,8 @@ export function parseItemText(text: string): ParseItemTextResponse {
           label: `+${n}% total to Lightning Resistance`,
           group: 'mods',
           tradeId: 'pseudo.pseudo_total_lightning_resistance',
-          value: { kind: 'number', min: n }
+          value: { kind: 'number', min: n },
+          ...modMeta()
         })
         continue
       }
@@ -229,7 +355,8 @@ export function parseItemText(text: string): ParseItemTextResponse {
           label: `${n} Life Regeneration per second`,
           group: 'mods',
           tradeId: 'explicit.stat_3325883026',
-          value: { kind: 'number', min: Math.floor(n) }
+          value: { kind: 'number', min: Math.floor(n) },
+          ...modMeta()
         })
         continue
       }
@@ -237,12 +364,26 @@ export function parseItemText(text: string): ParseItemTextResponse {
 
     // Heuristic: mod lines often start with +, -, or a number.
     if (/^[+\-]?\d/.test(line) || /^[+\-]\d/.test(line) || line.includes('%') || line.includes('to ')) {
-      filters.push({
-        id: `mod:${line.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)}`,
-        label: line,
-        group: 'mods',
-        value: { kind: 'text', text: line }
-      })
+      const roll = parseModNumber(line)
+      const id = `mod:${line.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60)}`
+      if (roll !== undefined) {
+        filters.push({
+          id,
+          label: line,
+          group: 'mods',
+          modSourceLine: line,
+          value: { kind: 'number', min: roll },
+          ...modMeta()
+        })
+      } else {
+        filters.push({
+          id,
+          label: line,
+          group: 'mods',
+          value: { kind: 'text', text: line },
+          ...modMeta()
+        })
+      }
     }
   }
 

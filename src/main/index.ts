@@ -3,6 +3,7 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { parseItemText } from './trade/parseItemText'
+import { fetchPoe2LeagueIds } from './trade/poe2Leagues'
 import { searchTrade } from './trade/searchTrade'
 import type { ApiErrorShape, ParseItemTextResponse, TradeSearchRequest, TradeSearchResponse } from '../shared/trade'
 
@@ -116,6 +117,20 @@ app.whenReady().then(() => {
 
         console.log('[trade:status]', { url, apexDomain, connected, cookies: names })
         return { connected, cookies: names }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Unknown error'
+        return { message }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'trade:listLeagues',
+    async (_evt, baseUrl?: string): Promise<{ leagues: string[] } | ApiErrorShape> => {
+      try {
+        const origin = (baseUrl ?? 'https://www.pathofexile.com').replace(/\/+$/, '')
+        const leagues = await fetchPoe2LeagueIds(origin)
+        return { leagues }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Unknown error'
         return { message }

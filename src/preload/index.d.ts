@@ -10,6 +10,7 @@ declare global {
         search(req: TradeSearchRequest): Promise<TradeSearchResponse | ApiErrorShape>
         connect(baseUrl?: string): Promise<{ ok: true } | ApiErrorShape>
         status(baseUrl?: string): Promise<{ connected: boolean; cookies: string[] } | ApiErrorShape>
+        listLeagues(baseUrl?: string): Promise<{ leagues: string[] } | ApiErrorShape>
       }
     }
   }
