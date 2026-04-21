@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, toRaw, nextTick } from 'vue'
+import { computed, onMounted, onUnmounted, ref, toRaw, nextTick, watch } from 'vue'
 import type {
   ApiErrorShape,
   ParseItemTextResponse,
@@ -57,6 +57,27 @@ const showItemStatsOnHover = computed<boolean>({
     saveSettings(settings.value)
   }
 })
+
+const overlayAccelerator = computed({
+  get() {
+    return settings.value.overlayAccelerator
+  },
+  set(v: string) {
+    settings.value.overlayAccelerator = v
+    saveSettings(settings.value)
+  }
+})
+
+const overlayHotkeyRegError = ref<string | null>(null)
+let removeOverlayHotkeyListener: (() => void) | null = null
+let overlayHotkeyDebounce: ReturnType<typeof setTimeout> | null = null
+
+async function applyOverlayHotkeyFromSettings(): Promise<void> {
+  overlayHotkeyRegError.value = null
+  const acc = settings.value.overlayAccelerator.trim()
+  const res = await window.api.overlay.registerHotkey(acc)
+  if ('message' in res) overlayHotkeyRegError.value = res.message
+}
 
 const parsing = ref(false)
 const searching = ref(false)
@@ -304,6 +325,14 @@ async function loadLeagues(): Promise<void> {
   }
 }
 
+function onMinimizeWindow(): void {
+  void window.api.app.minimizeMainWindow()
+}
+
+function onCloseWindow(): void {
+  void window.api.app.closeMainWindow()
+}
+
 async function refreshTradeStatus(): Promise<void> {
   try {
     const res = await window.api.trade.status(settings.value.baseUrl.trim() || undefined)
@@ -320,16 +349,44 @@ async function refreshTradeStatus(): Promise<void> {
   }
 }
 
+watch(
+  () => settings.value.overlayAccelerator,
+  () => {
+    if (overlayHotkeyDebounce) clearTimeout(overlayHotkeyDebounce)
+    overlayHotkeyDebounce = setTimeout(() => {
+      void applyOverlayHotkeyFromSettings()
+      overlayHotkeyDebounce = null
+    }, 450)
+  }
+)
+
 onMounted(() => {
   settings.value = loadSettings()
   refreshTradeStatus()
   loadLeagues()
   window.addEventListener('scroll', onScrollCloseTooltip, true)
+
+  removeOverlayHotkeyListener = window.api.overlay.onItemFromHotkey((p) => {
+    showSettings.value = false
+    listingTooltip.value = null
+    clearListingTooltipHide()
+    if (p.error) {
+      error.value = p.error
+      return
+    }
+    itemText.value = p.text ?? ''
+    error.value = null
+    void onConvert()
+  })
+  void applyOverlayHotkeyFromSettings()
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', onScrollCloseTooltip, true)
   clearListingTooltipHide()
+  removeOverlayHotkeyListener?.()
+  removeOverlayHotkeyListener = null
+  if (overlayHotkeyDebounce) clearTimeout(overlayHotkeyDebounce)
 })
 </script>
 
@@ -343,12 +400,20 @@ onUnmounted(() => {
           <span class="mi">inventory_2</span>
           <div class="brandText">
             <h1 class="brandTitle">Exile's Ledger</h1>
-            <p class="brandSub">Paste item text → pick filters → search</p>
+            <p class="brandSub">Hotkey or paste item → filters → search</p>
           </div>
         </div>
-        <button class="iconBtn" @click="showSettings = true" title="Settings">
-          <span class="mi">settings</span>
-        </button>
+        <div class="headerActions">
+          <button type="button" class="iconBtn" @click="showSettings = true" title="Settings">
+            <span class="mi">settings</span>
+          </button>
+          <button type="button" class="iconBtn" @click="onMinimizeWindow" title="Minimize">
+            <span class="mi">minimize</span>
+          </button>
+          <button type="button" class="iconBtn iconBtnClose" @click="onCloseWindow" title="Close window">
+            <span class="mi">close</span>
+          </button>
+        </div>
       </div>
     </header>
 
@@ -672,6 +737,30 @@ onUnmounted(() => {
           <input v-model="baseUrl" class="settingsInput" placeholder="https://www.pathofexile.com" />
         </div>
 
+        <!-- In-game overlay hotkey -->
+        <div class="settingsBlock">
+          <div class="settingsBlockLabel">In-game overlay hotkey</div>
+          <p class="settingsHint settingsHintTight">
+            Focus Path of Exile, hover an item, then press the hotkey. The app saves your clipboard, sends
+            <strong>Ctrl+C</strong> to the game to copy the item, fills this tool, then restores your clipboard
+            (text only). Leave blank to disable.
+          </p>
+          <input
+            v-model="overlayAccelerator"
+            class="settingsInput"
+            placeholder="e.g. CommandOrControl+Shift+E"
+            spellcheck="false"
+            autocomplete="off"
+          />
+          <div v-if="overlayHotkeyRegError" class="settingsError">{{ overlayHotkeyRegError }}</div>
+          <div class="settingsHint settingsHintTight">
+            Uses Electron
+            <a class="settingsLink" href="https://www.electronjs.org/docs/latest/api/accelerator" target="_blank" rel="noreferrer"
+              >accelerator syntax</a
+            >. Borderless / windowed PoE works best; fullscreen and elevation can block simulated keys.
+          </div>
+        </div>
+
         <!-- Hover stats -->
         <div class="settingsBlock">
           <div class="settingsBlockLabel">Item Stats on Hover</div>
@@ -799,7 +888,10 @@ onUnmounted(() => {
   --error: #ffb4ab;
   --error-bg: #93000a;
 
-  min-height: 100vh;
+  min-height: 100%;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--bg);
   color: var(--text);
   font-family: 'Manrope', sans-serif;
@@ -831,12 +923,21 @@ onUnmounted(() => {
   z-index: 50;
   background: var(--s0);
   box-shadow: 0 4px 32px rgba(231, 193, 120, 0.06);
+  -webkit-app-region: drag;
+  app-region: drag;
 }
 .headerInner {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 16px 28px;
+}
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 .headerBrand {
   display: flex;
@@ -867,6 +968,8 @@ onUnmounted(() => {
   letter-spacing: 0.02em;
 }
 .iconBtn {
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
   background: transparent;
   border: none;
   color: var(--text-dim);
@@ -879,6 +982,9 @@ onUnmounted(() => {
   border-radius: 2px;
 }
 .iconBtn:hover { color: var(--gold); }
+.iconBtnClose:hover {
+  color: var(--error);
+}
 
 /* ─── Status bar ────────────────────────────────────────────────── */
 .statusBar {
@@ -938,6 +1044,7 @@ onUnmounted(() => {
   padding: 12px 14px;
   box-sizing: border-box;
   transition: background 0.2s;
+  user-select: text;
 }
 .itemTextarea:focus { background: var(--s3); }
 .itemTextarea::placeholder { color: rgba(209, 197, 180, 0.3); }
@@ -1468,6 +1575,18 @@ onUnmounted(() => {
 .settingsSelect option { background: var(--s2); }
 .settingsError { font-size: 11px; color: var(--error); }
 .settingsHint { font-size: 11px; color: var(--text-dim); }
+.settingsHintTight {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+.settingsLink {
+  color: var(--gold);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.settingsLink:hover {
+  color: var(--gold-dim);
+}
 .settingsSubField { display: flex; flex-direction: column; gap: 5px; }
 .settingsSubLabel {
   font-size: 10px;

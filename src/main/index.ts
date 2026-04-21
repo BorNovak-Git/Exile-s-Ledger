@@ -6,15 +6,20 @@ import { parseItemText } from './trade/parseItemText'
 import { fetchPoe2LeagueIds } from './trade/poe2Leagues'
 import { searchTrade } from './trade/searchTrade'
 import type { ApiErrorShape, ParseItemTextResponse, TradeSearchRequest, TradeSearchResponse } from '../shared/trade'
+import { registerOverlayGlobalShortcut, unregisterAllGlobalShortcuts } from './overlayHotkey'
 
 let connectWindow: BrowserWindow | null = null
+let mainWindow: BrowserWindow | null = null
 
 function createWindow(): void {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
+    frame: false,
+    /** Match renderer `--bg` so there is no default OS/chrome flash around the UI. */
+    backgroundColor: '#131313',
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -24,7 +29,7 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    mainWindow?.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -39,6 +44,10 @@ function createWindow(): void {
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
   }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 }
 
 // This method will be called when Electron has finished
@@ -57,6 +66,21 @@ app.whenReady().then(() => {
 
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
+
+  ipcMain.handle('app:minimizeMainWindow', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.minimize()
+  })
+
+  ipcMain.handle('app:closeMainWindow', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.close()
+  })
+
+  ipcMain.handle(
+    'overlay:registerHotkey',
+    async (_evt, accelerator: string): Promise<{ ok: true } | { message: string }> => {
+      return registerOverlayGlobalShortcut(accelerator, () => mainWindow)
+    }
+  )
 
   ipcMain.handle('trade:parseItemText', async (_evt, text: string): Promise<ParseItemTextResponse> => {
     console.log('[trade:parseItemText] input chars:', text?.length ?? 0)
@@ -181,6 +205,10 @@ app.whenReady().then(() => {
   )
 
   createWindow()
+
+  app.on('will-quit', () => {
+    unregisterAllGlobalShortcuts()
+  })
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

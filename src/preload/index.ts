@@ -4,6 +4,10 @@ import type { ParseItemTextResponse, TradeSearchRequest, TradeSearchResponse, Ap
 
 // Custom APIs for renderer
 const api = {
+  app: {
+    minimizeMainWindow: (): Promise<void> => ipcRenderer.invoke('app:minimizeMainWindow'),
+    closeMainWindow: (): Promise<void> => ipcRenderer.invoke('app:closeMainWindow')
+  },
   trade: {
     parseItemText: (text: string): Promise<ParseItemTextResponse> => {
       console.log('[preload] invoke trade:parseItemText', { chars: text?.length ?? 0 })
@@ -28,6 +32,19 @@ const api = {
     listLeagues: (baseUrl?: string): Promise<{ leagues: string[] } | ApiErrorShape> => {
       console.log('[preload] invoke trade:listLeagues', { baseUrl })
       return ipcRenderer.invoke('trade:listLeagues', baseUrl)
+    }
+  },
+  overlay: {
+    registerHotkey: (accelerator: string): Promise<{ ok: true } | { message: string }> => {
+      return ipcRenderer.invoke('overlay:registerHotkey', accelerator ?? '')
+    },
+    onItemFromHotkey: (cb: (payload: { text: string; error?: string }) => void): (() => void) => {
+      const channel = 'overlay:item-from-hotkey'
+      const listener = (_e: unknown, payload: { text: string; error?: string }): void => cb(payload)
+      ipcRenderer.on(channel, listener)
+      return () => {
+        ipcRenderer.removeListener(channel, listener)
+      }
     }
   }
 }

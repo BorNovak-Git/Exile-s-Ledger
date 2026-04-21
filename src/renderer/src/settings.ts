@@ -2,6 +2,11 @@ export type AppSettings = {
   league: string
   baseUrl: string
   showItemStatsOnHover: boolean
+  /**
+   * Electron accelerator (e.g. CommandOrControl+Shift+E). Empty = disabled.
+   * @see https://www.electronjs.org/docs/latest/api/accelerator
+   */
+  overlayAccelerator: string
 }
 
 const SETTINGS_KEY = 'poe-app.settings.v1'
@@ -9,7 +14,8 @@ const SETTINGS_KEY = 'poe-app.settings.v1'
 const DEFAULT_SETTINGS: AppSettings = {
   league: 'Standard',
   baseUrl: 'https://www.pathofexile.com',
-  showItemStatsOnHover: true
+  showItemStatsOnHover: true,
+  overlayAccelerator: 'CommandOrControl+Shift+E'
 }
 
 export function loadSettings(): AppSettings {
@@ -24,8 +30,10 @@ export function loadSettings(): AppSettings {
       typeof parsed.baseUrl === 'string' && parsed.baseUrl.trim().length ? parsed.baseUrl.trim() : DEFAULT_SETTINGS.baseUrl
     const showItemStatsOnHover =
       typeof parsed.showItemStatsOnHover === 'boolean' ? parsed.showItemStatsOnHover : DEFAULT_SETTINGS.showItemStatsOnHover
+    const overlayAccelerator =
+      typeof parsed.overlayAccelerator === 'string' ? parsed.overlayAccelerator.trim() : DEFAULT_SETTINGS.overlayAccelerator
 
-    return { league, baseUrl, showItemStatsOnHover }
+    return { league, baseUrl, showItemStatsOnHover, overlayAccelerator }
   } catch {
     return { ...DEFAULT_SETTINGS }
   }
@@ -37,7 +45,8 @@ export function saveSettings(next: AppSettings): void {
     JSON.stringify({
       league: next.league.trim(),
       baseUrl: next.baseUrl.trim(),
-      showItemStatsOnHover: next.showItemStatsOnHover
+      showItemStatsOnHover: next.showItemStatsOnHover,
+      overlayAccelerator: next.overlayAccelerator.trim()
     } satisfies AppSettings)
   )
 }
