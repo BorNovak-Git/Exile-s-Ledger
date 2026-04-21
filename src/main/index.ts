@@ -1,5 +1,6 @@
 import { app, shell, BrowserWindow, clipboard, ipcMain, session } from 'electron'
 import { join } from 'path'
+import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { parseItemText } from './trade/parseItemText'
@@ -54,8 +55,19 @@ function createWindow(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+  // Set app user model id for windows (match `appId` in electron-builder.yml)
+  electronApp.setAppUserModelId('com.electron.app')
+
+  if (app.isPackaged) {
+    autoUpdater.logger = console
+    autoUpdater.on('error', (err) => {
+      console.error('[autoUpdater] error', err)
+    })
+    autoUpdater.on('update-downloaded', () => {
+      console.log('[autoUpdater] update downloaded; will install on quit')
+    })
+    void autoUpdater.checkForUpdatesAndNotify()
+  }
 
   // Default open or close DevTools by F12 in development
   // and ignore CommandOrControl + R in production.
