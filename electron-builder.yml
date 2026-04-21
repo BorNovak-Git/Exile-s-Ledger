@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: poe-app
+productName: exile-s-ledger
 directories:
   buildResources: build
 files:
@@ -12,9 +12,13 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: poe-app
+  executableName: exile-s-ledger
+  target:
+    - target: nsis
+      arch:
+        - x64
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: exile-s-ledger-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always
@@ -39,5 +43,6 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: false
 publish:
-  provider: generic
-  url: https://example.com/auto-updates
+  provider: github
+  owner: BorNovak-Git
+  repo: Exile-s-Ledger
