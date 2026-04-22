@@ -278,31 +278,36 @@ function toggleSelected(id: string, checked: boolean): void {
   selectedIds.value = next
 }
 
-/** Which numeric bounds to show for editing (search still uses whatever min/max are set). */
+/** Which bound inputs to show when not using the slider (pure ES caps, req level, legacy rows). */
 function numberSlotsFor(f: TradeFilterOption): ('min' | 'max')[] {
   if (f.value?.kind !== 'number') return []
-  const id = f.tradeId ?? ''
-  if (id === 'req_filters.lvl') return ['max']
-  if (/^(explicit\.|implicit\.|pseudo\.|rune\.)/.test(id)) return ['min', 'max']
-  // Client-matched mods (clipboard line, no trade stat id): same min/max editing as other affixes.
-  if (f.group === 'mods' && f.modSourceLine) return ['min', 'max']
-  return ['min']
+  const v = f.value
+  const hasMin = v.min !== undefined
+  const hasMax = v.max !== undefined
+  if (hasMin && !hasMax) return ['min']
+  if (hasMax && !hasMin) return ['max']
+  if (hasMin && hasMax) return ['min', 'max']
+  return []
 }
 
-function onFilterNumberInput(id: string, field: 'min' | 'max', raw: string): void {
+/** Awakened-style slider only on modifier rows; everything else uses plain inputs. */
+function numericUiFor(f: TradeFilterOption): 'slider' | 'inputs' {
+  if (f.value?.kind !== 'number') return 'inputs'
+  if (f.group !== 'mods') return 'inputs'
+  return 'slider'
+}
+
+function onFilterNumericPatch(id: string, patch: Partial<{ min: number; max: number }>): void {
   const list = parseResult.value?.filters
   if (!list) return
   const f = list.find((x) => x.id === id)
   if (!f || f.value?.kind !== 'number') return
-  const t = raw.trim()
-  const parsed: number | undefined = t === '' || t === '-' ? undefined : Number(t)
-  if (parsed !== undefined && Number.isNaN(parsed)) return
   const prev = f.value
-  f.value = {
-    kind: 'number',
-    min: field === 'min' ? parsed : prev.min,
-    max: field === 'max' ? parsed : prev.max
-  }
+  const nextMin = Object.prototype.hasOwnProperty.call(patch, 'min') ? patch.min : prev.min
+  const nextMax = Object.prototype.hasOwnProperty.call(patch, 'max') ? patch.max : prev.max
+  if (nextMin !== undefined && Number.isNaN(nextMin)) return
+  if (nextMax !== undefined && Number.isNaN(nextMax)) return
+  f.value = { kind: 'number', min: nextMin, max: nextMax }
 }
 
 const selectedFilters = computed(() => filters.value.filter((f) => selectedIds.value.has(f.id)))
@@ -316,8 +321,12 @@ function toPlainSelectedFilters(list: TradeFilterOption[]): TradeFilterOption[] 
       label: rawF.label,
       group: rawF.group,
       tradeId: rawF.tradeId,
+      tradeIds: rawF.tradeIds,
       modAffix: rawF.modAffix,
       modSourceLine: rawF.modSourceLine,
+      modTag: rawF.modTag,
+      modRoll: rawF.modRoll,
+      modRollBounds: rawF.modRollBounds,
       value: rawV ? { ...rawV } : undefined
     }
   })
@@ -336,6 +345,11 @@ async function onConvert(): Promise<void> {
     const res = await window.api.trade.parseItemText(raw)
     parseResult.value = res
     selectedIds.value = new Set(res.filters.map((f) => f.id))
+    // Slider caps (`modRollBounds.max`) are baked into each mod filter by the
+    // main-process parser. Priority: (1) bundled T1 max lookup per trade id
+    // (from `src/main/trade/data/t1MaxRolls.json`, sourced from PoE2 game
+    // data), (2) inline `47(40-55)` tier range from the clipboard if
+    // "Advanced Mod Descriptions" is enabled, (3) the item's own roll.
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to parse item text'
   } finally {
@@ -373,6 +387,7 @@ async function onSearch(): Promise<void> {
       league: settings.value.league.trim() || 'Standard',
       baseUrl: settings.value.baseUrl.trim() || undefined,
       selectedFilters: plainSelected,
+      itemType: parseResult.value?.itemType,
       limit: 10
     })
     if (isApiErrorShape(res)) {
@@ -619,8 +634,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="gold"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -637,8 +653,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="muted"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -655,8 +672,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="gold"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -673,8 +691,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="purple"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -691,8 +710,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="purple"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -709,8 +729,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="purple"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
