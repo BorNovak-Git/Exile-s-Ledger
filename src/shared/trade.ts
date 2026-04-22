@@ -85,6 +85,18 @@ export type TradeItemStats = {
   craftedMods?: string[]
   enchantMods?: string[]
   fracturedMods?: string[]
+  /** PoE2 desecrated modifiers (well of souls / unholy). */
+  desecratedMods?: string[]
+  /** PoE2 sanctified modifiers (sanctum / sanctified relics). */
+  sanctifiedMods?: string[]
+  /** PoE2 scourge modifiers. */
+  scourgeMods?: string[]
+  /** Flask "utility" mods (flask-granted auras / charges). */
+  utilityMods?: string[]
+  /** Logbook / expedition mods. */
+  logbookMods?: string[]
+  /** Server-returned pseudo stats (only present when the fetch is called with `pseudos[]`). */
+  pseudoMods?: string[]
   corrupted?: boolean
 }
 

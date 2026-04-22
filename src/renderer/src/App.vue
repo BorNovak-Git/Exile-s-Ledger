@@ -1060,11 +1060,71 @@ onUnmounted(() => {
                 {{ line }}
               </div>
             </div>
+            <div v-if="listingTooltip.listing.stats.pseudoMods?.length" class="ttSection">
+              <div class="ttSLabel">Pseudo</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.pseudoMods"
+                :key="'ps' + i"
+                class="ttMod ttPseudo"
+              >
+                {{ line }}
+              </div>
+            </div>
             <div v-if="listingTooltip.listing.stats.explicitMods?.length" class="ttSection">
               <div class="ttSLabel">Explicit</div>
               <div
                 v-for="(line, i) in listingTooltip.listing.stats.explicitMods"
                 :key="'ex' + i"
+                class="ttMod"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.desecratedMods?.length" class="ttSection">
+              <div class="ttSLabel">Desecrated</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.desecratedMods"
+                :key="'des' + i"
+                class="ttMod ttDesecrated"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.sanctifiedMods?.length" class="ttSection">
+              <div class="ttSLabel">Sanctified</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.sanctifiedMods"
+                :key="'san' + i"
+                class="ttMod ttSanctified"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.scourgeMods?.length" class="ttSection">
+              <div class="ttSLabel">Scourge</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.scourgeMods"
+                :key="'sco' + i"
+                class="ttMod ttScourge"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.utilityMods?.length" class="ttSection">
+              <div class="ttSLabel">Utility</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.utilityMods"
+                :key="'ut' + i"
+                class="ttMod ttUtility"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.logbookMods?.length" class="ttSection">
+              <div class="ttSLabel">Logbook</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.logbookMods"
+                :key="'lb' + i"
                 class="ttMod"
               >
                 {{ line }}
@@ -1811,6 +1871,23 @@ onUnmounted(() => {
 }
 .ttEnchant {
   color: rgba(255, 170, 255, 0.9);
+}
+.ttDesecrated {
+  /* Abyssal green — matches the in-game desecrated mod tint. */
+  color: #2fb87d;
+}
+.ttSanctified {
+  color: rgba(250, 230, 160, 0.92);
+}
+.ttScourge {
+  color: rgba(255, 160, 120, 0.92);
+}
+.ttUtility {
+  color: rgba(170, 220, 255, 0.9);
+}
+.ttPseudo {
+  color: rgba(200, 200, 255, 0.72);
+  font-style: italic;
 }
 .ttCorrupted {
   margin-top: 12px;

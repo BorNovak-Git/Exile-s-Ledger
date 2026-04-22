@@ -30,6 +30,45 @@ type TradeFetchApiResponse = {
       craftedMods?: string[]
       enchantMods?: string[]
       fracturedMods?: string[]
+      /**
+       * PoE2 adds its own mod buckets on top of the classic PoE1 set. The trade
+       * fetch returns each in its own parallel field — we must read them all or
+       * the hover tooltip silently hides them. Mirrors `TRADE_STAT_PREFIXES`.
+       */
+      desecratedMods?: string[]
+      sanctifiedMods?: string[]
+      scourgeMods?: string[]
+      /** Flasks return their "on use" mods here, not in explicitMods. */
+      utilityMods?: string[]
+      logbookMods?: string[]
+      /** Only present when the fetch URL was called with `pseudos[]=`. */
+      pseudoMods?: string[]
+      /**
+       * When the standard mod buckets are missing but the fetch still returned a
+       * renderable item, trade2 sometimes only fills `extended.text` (the full item
+       * tooltip as plain text, base64-encoded). We prefer the typed buckets but
+       * fall back to this so the hover tooltip never ends up empty.
+       *
+       * `hashes` is the authoritative classifier: for each mod category the API
+       * lists [stat_hash, indices_into_that_category_array]. We log it when a
+       * hover looks mis-categorized so we can diagnose which bucket the server
+       * actually considers each line to belong to.
+       */
+      extended?: {
+        text?: string
+        hashes?: {
+          explicit?: Array<[string, number[]]>
+          implicit?: Array<[string, number[]]>
+          rune?: Array<[string, number[]]>
+          crafted?: Array<[string, number[]]>
+          fractured?: Array<[string, number[]]>
+          enchant?: Array<[string, number[]]>
+          desecrated?: Array<[string, number[]]>
+          sanctified?: Array<[string, number[]]>
+          scourge?: Array<[string, number[]]>
+          pseudo?: Array<[string, number[]]>
+        }
+      }
     }
     listing?: {
       whisper?: string
@@ -66,43 +105,127 @@ function formatNameValueLines(
   return lines.length ? lines : undefined
 }
 
+/**
+ * Trade2 mod text is returned with wiki-link markup baked in, e.g.
+ *   "61% increased [EnergyShield|Energy Shield]"
+ *   "+23 to [Intelligence|Intelligence]"
+ * We want to show only the human-readable label.
+ *   "[Display|Key]"  → "Display"
+ *   "[JustOne]"      → "JustOne"
+ */
+function stripWikiMarkup(s: unknown): string {
+  const raw = typeof s === 'string' ? s : String(s ?? '')
+  return raw
+    .replace(/\[([^\][|]+)\|([^\][]+)\]/g, '$2')
+    .replace(/\[([^\][|]+)\]/g, '$1')
+    .trim()
+}
+
+function cleanModList(list?: unknown[]): string[] | undefined {
+  if (!list || !list.length) return undefined
+  const cleaned = list.map((l) => stripWikiMarkup(l)).filter((l) => l.length > 0)
+  return cleaned.length ? cleaned : undefined
+}
+
+function isDesecratedTagged(line: string): boolean {
+  return /\(desecrated\)\s*$/i.test(line)
+}
+
+/**
+ * Trade2 occasionally only fills `extended.text` (the full base64 item tooltip)
+ * instead of the typed mod buckets — e.g. on corrupted items with only implicit
+ * variants. Keep it as a last-resort fallback so the hover is never blank.
+ */
+function decodeExtendedText(text?: string): string[] | undefined {
+  if (!text) return undefined
+  let decoded = ''
+  try {
+    decoded = Buffer.from(text, 'base64').toString('utf8')
+  } catch {
+    return undefined
+  }
+  const lines = decoded
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(
+      (l) =>
+        l.length > 0 &&
+        l !== '--------' &&
+        !/^item class:/i.test(l) &&
+        !/^rarity:/i.test(l) &&
+        !/^requires /i.test(l) &&
+        !/^item level:/i.test(l) &&
+        !/^quality:/i.test(l)
+    )
+  return lines.length ? lines : undefined
+}
+
 function toTradeItemStats(
   item?: TradeFetchApiResponse['result'][number]['item']
 ): TradeItemStats | undefined {
   if (!item) return undefined
   const requirements = formatNameValueLines(item.requirements)
   const properties = formatNameValueLines(item.properties)
-  const implicitMods = item.implicitMods?.length ? item.implicitMods : undefined
-  const explicitMods = item.explicitMods?.length ? item.explicitMods : undefined
-  const runeMods = item.runeMods?.length ? item.runeMods : undefined
-  const craftedMods = item.craftedMods?.length ? item.craftedMods : undefined
-  const enchantMods = item.enchantMods?.length ? item.enchantMods : undefined
-  const fracturedMods = item.fracturedMods?.length ? item.fracturedMods : undefined
+  const implicitMods = cleanModList(item.implicitMods)
+  let explicitMods = cleanModList(item.explicitMods)
+  const runeMods = cleanModList(item.runeMods)
+  const craftedMods = cleanModList(item.craftedMods)
+  const enchantMods = cleanModList(item.enchantMods)
+  const fracturedMods = cleanModList(item.fracturedMods)
+  let desecratedMods = cleanModList(item.desecratedMods)
+  const sanctifiedMods = cleanModList(item.sanctifiedMods)
+  const scourgeMods = cleanModList(item.scourgeMods)
+  const utilityMods = cleanModList(item.utilityMods)
+  const logbookMods = cleanModList(item.logbookMods)
+  const pseudoMods = cleanModList(item.pseudoMods)
 
-  if (
-    !requirements &&
-    !properties &&
-    !implicitMods &&
-    !explicitMods &&
-    !runeMods &&
-    !craftedMods &&
-    !enchantMods &&
-    !fracturedMods &&
-    item.corrupted === undefined
-  ) {
-    return undefined
+  // Some API payloads put non-desecrated text inside `desecratedMods`.
+  // Keep only explicitly tagged "(desecrated)" lines green; merge everything
+  // else back into regular explicit mods.
+  if (desecratedMods?.length) {
+    const tagged = desecratedMods.filter(isDesecratedTagged)
+    const plain = desecratedMods.filter((line) => !isDesecratedTagged(line))
+    if (plain.length) {
+      explicitMods = [...(explicitMods ?? []), ...plain]
+    }
+    desecratedMods = tagged.length ? tagged : undefined
   }
 
+  const anyTypedMods =
+    implicitMods ||
+    explicitMods ||
+    runeMods ||
+    craftedMods ||
+    enchantMods ||
+    fracturedMods ||
+    desecratedMods ||
+    sanctifiedMods ||
+    scourgeMods ||
+    utilityMods ||
+    logbookMods ||
+    pseudoMods
+
+  // Fallback path: server gave us no typed buckets but did include `extended.text`.
+  // Decode and stash under explicitMods so the tooltip still has something to show.
+  const fallbackExplicit = !anyTypedMods ? decodeExtendedText(item.extended?.text) : undefined
+
+  const corrupted = item.corrupted === true ? true : undefined
   return {
     requirements,
     properties,
     implicitMods,
-    explicitMods,
+    explicitMods: explicitMods ?? fallbackExplicit,
     runeMods,
     craftedMods,
     enchantMods,
     fracturedMods,
-    corrupted: item.corrupted
+    desecratedMods,
+    sanctifiedMods,
+    scourgeMods,
+    utilityMods,
+    logbookMods,
+    pseudoMods,
+    corrupted
   }
 }
 
@@ -115,7 +238,12 @@ function itemHasAffixLines(item?: TradeFetchApiResponse['result'][number]['item'
     item.runeMods,
     item.craftedMods,
     item.enchantMods,
-    item.fracturedMods
+    item.fracturedMods,
+    item.desecratedMods,
+    item.sanctifiedMods,
+    item.scourgeMods,
+    item.utilityMods,
+    item.logbookMods
   ]
   return lists.some((a) => Array.isArray(a) && a.length > 0)
 }
@@ -259,7 +387,12 @@ function collectAllModTexts(item?: ItemPayload): string[] {
     item.runeMods,
     item.craftedMods,
     item.enchantMods,
-    item.fracturedMods
+    item.fracturedMods,
+    item.desecratedMods,
+    item.sanctifiedMods,
+    item.scourgeMods,
+    item.utilityMods,
+    item.logbookMods
   ]
   const out: string[] = []
   for (const b of buckets)
@@ -577,71 +710,112 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
   const hasItemType = !!(req.itemType && req.itemType.trim().length)
   const modCount = modSlots.length
   /**
-   * Relax plan — sparse K walk so we don't fire N+1 requests in a row and hit rate
-   * limits. For N mods we try roughly [N, ⌈2N/3⌉, ⌈N/2⌉, 2, 1] and dedupe. Each K is
-   * ~33% looser than the previous, which strikes a good balance between "find the
-   * tightest match we can" and "finish in under 5 seconds".
+   * Relax plan — MINIMAL ladder. PoE2 trade search is rate limited at roughly
+   * 5-8 hits per 10 seconds per IP; firing 10+ search POSTs back-to-back guarantees
+   * a 429 storm that stalls the UI for a full minute on `Retry-After`.
    *
-   * Order:
-   *  1. Item type + stats, sparse K steps
-   *  2. No item type + stats, sparse K steps
-   *  3. No stats at all (last resort)
+   * So we only try at most 4 search POSTs per user action:
+   *  1. strict:  type + all mods (K=N)
+   *  2. medium:  type + ⌈N/2⌉ mods
+   *  3. loose:   no type + K=1 (any mod matches)
+   *  4. last:    no type + no stats (bare category/defence shell)
+   * Each step that already returns enough listings breaks the loop early.
    */
-  const sparseKLadder = (n: number): number[] => {
-    if (n <= 0) return []
-    const steps = [n, Math.ceil((n * 2) / 3), Math.ceil(n / 2), Math.ceil(n / 3), 2, 1]
-    const out: number[] = []
-    for (const k of steps) {
-      const clamped = Math.max(1, Math.min(n, k))
-      if (!out.includes(clamped)) out.push(clamped)
-    }
-    return out
-  }
   const relaxPlan: RelaxStep[] = []
-  if (modCount > 0) {
-    const ladder = sparseKLadder(modCount)
-    if (hasItemType) {
-      for (const k of ladder) relaxPlan.push({ minMatch: k, withItemType: true })
-    }
-    for (const k of ladder) relaxPlan.push({ minMatch: k, withItemType: false })
+  if (modCount > 0 && hasItemType) {
+    relaxPlan.push({ minMatch: modCount, withItemType: true })
+    const half = Math.max(1, Math.ceil(modCount / 2))
+    if (half !== modCount) relaxPlan.push({ minMatch: half, withItemType: true })
+  } else if (modCount > 0) {
+    relaxPlan.push({ minMatch: modCount, withItemType: false })
   } else if (hasItemType) {
     relaxPlan.push({ minMatch: 0, withItemType: true })
   }
+  if (modCount > 0) {
+    relaxPlan.push({ minMatch: 1, withItemType: false })
+  }
   relaxPlan.push({ minMatch: 0, withItemType: false })
 
-  let body = buildBody(relaxPlan[0])
-  let searchJson = await doSearch(body)
-  let usedStep: RelaxStep = relaxPlan[0]
+  /**
+   * Target pool for client-side ranking. Smaller than before (was 30) — we need just
+   * enough variety to rank, not an exhaustive scrape, and every extra step is one
+   * more /search POST counting against the rate budget.
+   */
+  const poolTarget = clientModSlots.length ? Math.max(limit + 5, 12) : limit
+  /** Stop early once we have at least this many — reranking doesn't need poolTarget. */
+  const earlyStopAt = Math.max(limit, 8)
+  /** Minimum gap between /search POSTs to stay under ~5 req/10s. */
+  const searchStepDelayMs = 900
 
-  for (let i = 1; i < relaxPlan.length; i++) {
-    if ((searchJson.total ?? 0) > 0) break
-    const next = relaxPlan[i]
+  // Each listing's "step index" in the ladder — smaller is a stricter match.
+  // Used both for the notice (was there an exact hit?) and to prefer stricter hits
+  // when the id shows up in multiple relax steps (it always will — a K=8 match also
+  // matches K=6, K=4, etc.).
+  const idFirstSeenStep = new Map<string, number>()
+  const aggregatedIds: string[] = []
+  let strictestHitSearchJson: TradeSearchApiResponse | undefined
+  let strictestHitStep: RelaxStep | undefined
+  let lastSearchJson: TradeSearchApiResponse | undefined
+  let usedStep: RelaxStep = relaxPlan[0]
+  let body = buildBody(relaxPlan[0])
+
+  for (let i = 0; i < relaxPlan.length; i++) {
+    const step = relaxPlan[i]
+    if (i > 0) {
+      console.log(
+        `[searchTrade] have ${aggregatedIds.length} (target ${poolTarget}) — widening to { minMatch: ${step.minMatch}, withItemType: ${step.withItemType} }`
+      )
+      // Throttle between POSTs; PoE2 /search allows only ~5/10s per IP.
+      await new Promise((r) => setTimeout(r, searchStepDelayMs))
+    }
+    body = buildBody(step)
+    const stepSearchJson = await doSearch(body)
+    lastSearchJson = stepSearchJson
+    usedStep = step
+
+    const ids = stepSearchJson.result ?? []
+    let addedHere = 0
+    for (const id of ids) {
+      if (idFirstSeenStep.has(id)) continue
+      idFirstSeenStep.set(id, i)
+      aggregatedIds.push(id)
+      addedHere++
+      if (aggregatedIds.length >= poolTarget) break
+    }
     console.log(
-      `[searchTrade] 0 results at { minMatch: ${usedStep.minMatch}, withItemType: ${usedStep.withItemType} } — retrying at { minMatch: ${next.minMatch}, withItemType: ${next.withItemType} }`
+      `[searchTrade] step #${i} minMatch=${step.minMatch} withItemType=${step.withItemType} — total=${stepSearchJson.total}, added ${addedHere}, pool=${aggregatedIds.length}`
     )
-    body = buildBody(next)
-    searchJson = await doSearch(body)
-    usedStep = next
+
+    if ((stepSearchJson.total ?? 0) > 0 && strictestHitStep === undefined) {
+      strictestHitStep = step
+      strictestHitSearchJson = stepSearchJson
+    }
+
+    // Early exit: as soon as we have a usable pool, stop burning rate limit budget.
+    if (aggregatedIds.length >= earlyStopAt) break
   }
+
+  // Strictest step that actually matched anything is what the UI should describe —
+  // a widened pool including K=1 listings shouldn't advertise "matched 1/N" when a
+  // K=N hit also exists. Fall back to the last response so `total`/`id` are defined
+  // even when no step returned anything.
+  if (strictestHitStep) usedStep = strictestHitStep
+  const searchJson = strictestHitSearchJson ?? lastSearchJson!
 
   const relaxedFromItemType = !usedStep.withItemType && hasItemType
   const relaxedFromStats = modCount > 0 && usedStep.minMatch === 0
   const relaxedMinMatch = modCount > 0 ? usedStep.minMatch : undefined
 
-  console.log('[searchTrade] search response:', {
+  console.log('[searchTrade] aggregated search result:', {
     id: searchJson.id,
-    total: searchJson.total,
-    results: searchJson.result?.length,
+    totalAtStrictestHit: searchJson.total,
+    aggregatedIds: aggregatedIds.length,
     usedStep,
     relaxedFromItemType,
     relaxedFromStats
   })
-  // Trade search returns cheapest listings first; we fetch a slightly larger pool then
-  // re-rank client-side so we can prefer "more of the user's mods matched" over "cheapest
-  // same-category". At the relaxed levels (K < N) this is what pulls the best-matching
-  // listings to the top of the UI.
-  const candidatePoolSize = clientModSlots.length ? Math.min(30, Math.max(limit * 3, limit)) : limit
-  const allIds = (searchJson.result ?? []).slice(0, candidatePoolSize)
+
+  const allIds = aggregatedIds.slice(0, poolTarget)
 
   if (allIds.length === 0) {
     return { queryId: searchJson.id, total: searchJson.total, results: [], raw: searchJson }
@@ -685,6 +859,43 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
     }
 
     for (const r of chunkJson.result ?? []) fetchedRows.push(r)
+  }
+
+  // Diagnostic dump — which mod bucket the API put each line in, for every
+  // listing. If a hover looks miscategorised ("all explicits appearing under
+  // Desecrated"), this is the one place that tells us whether our tooltip
+  // logic or the server itself did the wrong thing.
+  for (const r of fetchedRows) {
+    const it = r.item
+    if (!it) continue
+    const buckets = {
+      implicit: it.implicitMods?.length ?? 0,
+      explicit: it.explicitMods?.length ?? 0,
+      rune: it.runeMods?.length ?? 0,
+      crafted: it.craftedMods?.length ?? 0,
+      enchant: it.enchantMods?.length ?? 0,
+      fractured: it.fracturedMods?.length ?? 0,
+      desecrated: it.desecratedMods?.length ?? 0,
+      sanctified: it.sanctifiedMods?.length ?? 0,
+      scourge: it.scourgeMods?.length ?? 0,
+      utility: it.utilityMods?.length ?? 0,
+      logbook: it.logbookMods?.length ?? 0,
+      pseudo: it.pseudoMods?.length ?? 0
+    }
+    const hashCounts = it.extended?.hashes
+      ? Object.fromEntries(
+          Object.entries(it.extended.hashes).map(([k, v]) => [k, Array.isArray(v) ? v.length : 0])
+        )
+      : undefined
+    console.log('[searchTrade] item buckets', {
+      id: r.id?.slice(0, 10),
+      name: it.name,
+      typeLine: it.typeLine,
+      buckets,
+      hashCounts,
+      desecratedText: it.desecratedMods,
+      explicitText: it.explicitMods
+    })
   }
 
   const fetchJson: TradeFetchApiResponse = { result: fetchedRows }
