@@ -64,18 +64,20 @@ const CACHE_TTL_MS = 24 * 60 * 60 * 1000
  * normalize to `"# to maximum energy shield"`.
  */
 export function normalizeStatText(raw: string): string {
-  return raw
-    .toLowerCase()
-    .replace(/\((rune|desecrated|implicit|fractured|enchant|crafted|corrupted)\)/g, ' ')
-    // Drop PoE's "Advanced Mod Descriptions" inline tier ranges — `47(40-55)` becomes
-    // just `47` so the resulting shape still matches DB entries like `# to maximum
-    // energy shield` instead of bloating into `# # # to maximum energy shield`.
-    .replace(/\(\s*-?\d+(?:\.\d+)?\s*[-–]\s*-?\d+(?:\.\d+)?\s*\)/g, ' ')
-    .replace(/[+-]?\d+(?:\.\d+)?/g, '#')
-    .replace(/\s+/g, ' ')
-    .replace(/[^a-z0-9# %]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
+  return (
+    raw
+      .toLowerCase()
+      .replace(/\((rune|desecrated|implicit|fractured|enchant|crafted|corrupted)\)/g, ' ')
+      // Drop PoE's "Advanced Mod Descriptions" inline tier ranges — `47(40-55)` becomes
+      // just `47` so the resulting shape still matches DB entries like `# to maximum
+      // energy shield` instead of bloating into `# # # to maximum energy shield`.
+      .replace(/\(\s*-?\d+(?:\.\d+)?\s*[-–]\s*-?\d+(?:\.\d+)?\s*\)/g, ' ')
+      .replace(/[+-]?\d+(?:\.\d+)?/g, '#')
+      .replace(/\s+/g, ' ')
+      .replace(/[^a-z0-9# %]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+  )
 }
 
 /** Tag hint from clipboard, if line ends with e.g. `(rune)` or `(desecrated)`. */
@@ -192,9 +194,7 @@ export function findStatsForMod(line: string): ModMatch {
   return { entries: all, sourceTag }
 }
 
-async function readDiskCache(): Promise<
-  { fetchedAt: number; entries: StatEntry[] } | undefined
-> {
+async function readDiskCache(): Promise<{ fetchedAt: number; entries: StatEntry[] } | undefined> {
   try {
     const file = join(app.getPath('userData'), CACHE_FILE)
     const raw = await fs.readFile(file, 'utf8')
@@ -206,17 +206,11 @@ async function readDiskCache(): Promise<
   }
 }
 
-async function writeDiskCache(payload: {
-  fetchedAt: number
-  entries: StatEntry[]
-}): Promise<void> {
+async function writeDiskCache(payload: { fetchedAt: number; entries: StatEntry[] }): Promise<void> {
   try {
     const file = join(app.getPath('userData'), CACHE_FILE)
     await fs.writeFile(file, JSON.stringify(payload), 'utf8')
   } catch (err) {
-    console.warn(
-      '[poe2StatsDb] disk cache write failed',
-      err instanceof Error ? err.message : err
-    )
+    console.warn('[poe2StatsDb] disk cache write failed', err instanceof Error ? err.message : err)
   }
 }

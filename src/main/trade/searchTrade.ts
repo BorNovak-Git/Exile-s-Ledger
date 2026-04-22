@@ -126,7 +126,9 @@ function shouldDropCorruptedBare(item?: TradeFetchApiResponse['result'][number][
 }
 
 /** Trade sometimes returns stubs with only name/type — nothing to show in a hover comparison. */
-function fetchPayloadMissingTooltipBasics(item?: TradeFetchApiResponse['result'][number]['item']): boolean {
+function fetchPayloadMissingTooltipBasics(
+  item?: TradeFetchApiResponse['result'][number]['item']
+): boolean {
   if (!item) return true
   if ((item.properties?.length ?? 0) > 0) return false
   if ((item.requirements?.length ?? 0) > 0) return false
@@ -313,16 +315,12 @@ function buildClientModSlots(selected: TradeFilterOption[]): ClientModSlot[] {
   for (const f of selected) {
     if (f.group !== 'mods') continue
     const source =
-      f.modSourceLine ??
-      (f.value?.kind === 'text' ? f.value.text : undefined) ??
-      f.label
+      f.modSourceLine ?? (f.value?.kind === 'text' ? f.value.text : undefined) ?? f.label
     if (!source) continue
     const shape = normalizeModText(source)
     if (!shape.length) continue
     const rule: ClientModRule =
-      f.value?.kind === 'number'
-        ? { shape, min: f.value.min, max: f.value.max }
-        : { shape }
+      f.value?.kind === 'number' ? { shape, min: f.value.min, max: f.value.max } : { shape }
     if (f.modHybridGroupId) {
       const arr = hybrid.get(f.modHybridGroupId) ?? []
       arr.push(rule)
@@ -642,9 +640,7 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
   // re-rank client-side so we can prefer "more of the user's mods matched" over "cheapest
   // same-category". At the relaxed levels (K < N) this is what pulls the best-matching
   // listings to the top of the UI.
-  const candidatePoolSize = clientModSlots.length
-    ? Math.min(30, Math.max(limit * 3, limit))
-    : limit
+  const candidatePoolSize = clientModSlots.length ? Math.min(30, Math.max(limit * 3, limit)) : limit
   const allIds = (searchJson.result ?? []).slice(0, candidatePoolSize)
 
   if (allIds.length === 0) {

@@ -17,7 +17,10 @@ function modTagFromLine(line: string): 'rune' | 'desecrated' | undefined {
  * in the UI label.
  */
 function stripInlineRollRanges(line: string): string {
-  return line.replace(/\(\s*-?\d+(?:\.\d+)?\s*[-–]\s*-?\d+(?:\.\d+)?\s*\)/g, '').replace(/\s{2,}/g, ' ').trim()
+  return line
+    .replace(/\(\s*-?\d+(?:\.\d+)?\s*[-–]\s*-?\d+(?:\.\d+)?\s*\)/g, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim()
 }
 
 function displayModLabel(line: string, tag: 'rune' | 'desecrated' | undefined): string {
@@ -522,7 +525,10 @@ export function parseItemText(text: string): ParseItemTextResponse {
           })
         } else if (roll !== undefined) {
           filters.push({
-            id: `rune:line:${line.toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 48)}`,
+            id: `rune:line:${line
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, '-')
+              .slice(0, 48)}`,
             label: displayModLabel(line, tag),
             group: 'item',
             modTag: 'rune',
@@ -605,7 +611,10 @@ export function parseItemText(text: string): ParseItemTextResponse {
   for (const f of filters) {
     if (seenIds.has(f.id)) continue
     const isStatTradeId =
-      !!f.tradeId && /^(explicit|implicit|fractured|rune|desecrated|enchant|crafted|pseudo|sanctum)\./.test(f.tradeId)
+      !!f.tradeId &&
+      /^(explicit|implicit|fractured|rune|desecrated|enchant|crafted|pseudo|sanctum)\./.test(
+        f.tradeId
+      )
     if (isStatTradeId && f.tradeId && seenStatTradeIds.has(f.tradeId)) continue
     seenIds.add(f.id)
     if (isStatTradeId && f.tradeId) seenStatTradeIds.add(f.tradeId)

@@ -150,13 +150,6 @@ function buildPerPoolMax(mods) {
   return pools
 }
 
-function tradeIdType(tradeId) {
-  // tradeId looks like `explicit.stat_3489782002`; the prefix is the pool.
-  const dot = tradeId.indexOf('.')
-  if (dot === -1) return 'explicit'
-  return tradeId.slice(0, dot)
-}
-
 async function main() {
   const statsPath = await loadCached(STATS_URL, 'ee2-stats.ndjson')
   const modsPath = await loadCached(MODS_URL, 'poe2-mods.json')
