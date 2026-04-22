@@ -1,6 +1,7 @@
 import type { ParseItemTextResponse, TradeFilterOption } from '../../shared/trade'
 import { getT1MaxForGroup } from './modT1Maxes'
-import { findStatsForMod, parseSourceTag } from './poe2StatsDb'
+import { lookupByShape, pseudoTradeIdsFor, type LocalStatEntry } from './poe2ModsDb'
+import { findStatsForMod, normalizeStatText, parseSourceTag } from './poe2StatsDb'
 
 function modTagFromLine(line: string): 'rune' | 'desecrated' | undefined {
   const t = parseSourceTag(line)?.toLowerCase()
@@ -247,6 +248,27 @@ function rollMetaFromLine(
   }
 }
 
+/**
+ * Default-enabled heuristic for a mod filter chip.
+ *
+ * Matches Exiled-Exchange-2 / awakened-poe-trade: on rare items we *don't* tick every
+ * explicit by default, because that guarantees zero results — the user picks the two
+ * or three mods that actually drive price (e.g. `+lvl to gems` over `+X to Spirit`).
+ * Implicit / rune / desecrated / crafted / enchant / fractured rolls are almost always
+ * price-defining, so they stay ticked.
+ */
+function defaultEnabledForMod(
+  rarity: string | undefined,
+  tag: 'rune' | 'desecrated' | undefined,
+  modSourceTag: string | undefined
+): boolean {
+  const effectiveTag = tag ?? modSourceTag
+  if (effectiveTag && effectiveTag !== 'explicit') return true
+  // Unique, magic, normal: few enough mods that auto-ticking all of them still returns results.
+  if (rarity !== 'rare') return true
+  return false
+}
+
 export function parseItemText(text: string): ParseItemTextResponse {
   console.log('[parseItemText] start')
   const rawLines = text.split(/\r?\n/)
@@ -491,6 +513,11 @@ export function parseItemText(text: string): ParseItemTextResponse {
       const roll = parseModNumber(line)
       const match = findStatsForMod(line)
       const tag = modTagFromLine(line)
+      const localEntry: LocalStatEntry | undefined = lookupByShape(normalizeStatText(line))
+      const statBetter = localEntry ? localEntry.better : undefined
+      const pseudoTradeIds = pseudoTradeIdsFor(localEntry)
+      const modSourceTag = match.entries[0]?.type?.toLowerCase()
+      const defaultEnabled = defaultEnabledForMod(rarity, tag, modSourceTag)
 
       // Resolve the hybrid group id for this row:
       //  - `desecrated` mods commonly emit 2+ consecutive sub-stats that share one mod.
@@ -521,7 +548,10 @@ export function parseItemText(text: string): ParseItemTextResponse {
             value:
               roll !== undefined
                 ? { kind: 'number', min: Math.floor(roll) }
-                : { kind: 'text', text: line }
+                : { kind: 'text', text: line },
+            ...(statBetter !== undefined ? { statBetter } : {}),
+            ...(pseudoTradeIds ? { pseudoTradeIds } : {}),
+            defaultEnabled: true
           })
         } else if (roll !== undefined) {
           filters.push({
@@ -532,7 +562,8 @@ export function parseItemText(text: string): ParseItemTextResponse {
             label: displayModLabel(line, tag),
             group: 'item',
             modTag: 'rune',
-            value: { kind: 'number', min: Math.floor(roll) }
+            value: { kind: 'number', min: Math.floor(roll) },
+            defaultEnabled: true
           })
         }
         continue
@@ -556,6 +587,9 @@ export function parseItemText(text: string): ParseItemTextResponse {
               ? { kind: 'number', min: Math.floor(roll) }
               : { kind: 'text', text: line },
           ...(roll !== undefined ? rollMetaFromLine(roll, line, tradeIds) : {}),
+          ...(statBetter !== undefined ? { statBetter } : {}),
+          ...(pseudoTradeIds ? { pseudoTradeIds } : {}),
+          defaultEnabled,
           ...modMeta()
         })
         continue
@@ -576,6 +610,8 @@ export function parseItemText(text: string): ParseItemTextResponse {
           ...(tag ? { modTag: tag } : {}),
           ...(hybridGroupId ? { modHybridGroupId: hybridGroupId } : {}),
           ...rollMetaFromLine(roll, line),
+          ...(statBetter !== undefined ? { statBetter } : {}),
+          defaultEnabled,
           ...modMeta()
         })
       } else {
@@ -586,6 +622,8 @@ export function parseItemText(text: string): ParseItemTextResponse {
           value: { kind: 'text', text: line },
           ...(tag ? { modTag: tag } : {}),
           ...(hybridGroupId ? { modHybridGroupId: hybridGroupId } : {}),
+          ...(statBetter !== undefined ? { statBetter } : {}),
+          defaultEnabled,
           ...modMeta()
         })
       }

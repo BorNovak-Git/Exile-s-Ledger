@@ -327,6 +327,9 @@ function toPlainSelectedFilters(list: TradeFilterOption[]): TradeFilterOption[] 
       modTag: rawF.modTag,
       modRoll: rawF.modRoll,
       modRollBounds: rawF.modRollBounds,
+      statBetter: rawF.statBetter,
+      pseudoTradeIds: rawF.pseudoTradeIds ? [...rawF.pseudoTradeIds] : undefined,
+      enabled: true,
       value: rawV ? { ...rawV } : undefined
     }
   })
@@ -344,7 +347,14 @@ async function onConvert(): Promise<void> {
   try {
     const res = await window.api.trade.parseItemText(raw)
     parseResult.value = res
-    selectedIds.value = new Set(res.filters.map((f) => f.id))
+    // Seed ticked chips from the parser's per-filter `defaultEnabled` hint.
+    // On rares that means explicit mods arrive un-ticked (they usually don't
+    // drive price — the user hand-picks the 1-2 that do, e.g. +lvl-to-gems).
+    // Non-mod rows (rarity / category / defences / runes / implicits) are
+    // always ticked unless the parser explicitly flags them off.
+    selectedIds.value = new Set(
+      res.filters.filter((f) => f.defaultEnabled !== false).map((f) => f.id)
+    )
     // Slider caps (`modRollBounds.max`) are baked into each mod filter by the
     // main-process parser. Priority: (1) bundled T1 max lookup per trade id
     // (from `src/main/trade/data/t1MaxRolls.json`, sourced from PoE2 game

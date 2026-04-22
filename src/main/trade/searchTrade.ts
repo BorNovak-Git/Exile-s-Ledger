@@ -499,10 +499,36 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
   const reqFilters: Record<string, unknown> = {}
   const miscFilters: Record<string, unknown> = {}
 
-  function rollToValue(v?: { min?: number; max?: number }): StatLeaf['value'] | undefined {
+  /**
+   * Convert an on-item numeric roll to the server-side `{min,max}` pair, honouring
+   * the stat's "better" direction sourced from EE2's bundled mods DB:
+   *
+   *   - `better === 1`   — higher rolls are better (ES, resistances, spirit). The
+   *     user's slider value is their *minimum acceptable* roll → send `{min}`.
+   *   - `better === -1`  — lower rolls are better (attribute reqs, cost multipliers).
+   *     Flip: the same slider value becomes the *maximum acceptable* roll → `{max}`.
+   *   - `better === 0` / undefined — not a numeric direction, use whatever bounds
+   *     the UI provided as-is.
+   *
+   * Matches awakened-poe-trade / Exiled-Exchange-2's `StatBetter` handling in
+   * `create-stat-filters.ts`. Without this flip the server-side filter on a
+   * negative-better mod says "at least -12%" which is a no-op.
+   */
+  function rollToValue(
+    v: { min?: number; max?: number } | undefined,
+    better: 1 | -1 | 0 | undefined
+  ): StatLeaf['value'] | undefined {
     if (!v) return undefined
     const min = v.min
     const max = v.max
+    if (better === -1) {
+      // The UI currently only surfaces one threshold (slider min) for mods, so the
+      // common case is `{min: roll}` — flip it to `{max: roll}` for negative stats.
+      if (min !== undefined && max === undefined) return { max: min }
+      if (min !== undefined && max !== undefined) return { min, max: max ?? null }
+      if (max !== undefined) return { max }
+      return undefined
+    }
     if (min !== undefined && max !== undefined) return { min, max: max ?? null }
     if (min !== undefined) return { min }
     if (max !== undefined) return { max }
@@ -511,6 +537,10 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
 
   for (const f of req.selectedFilters) {
     if (!f.tradeId) continue
+    // Disabled chips don't contribute to the query. The renderer already drops
+    // them on submit, but be defensive — older clients / replay of saved queries
+    // may still include them.
+    if (f.enabled === false) continue
 
     if (f.tradeId === 'type_filters.rarity') {
       if (f.value?.kind === 'text') typeFilters.rarity = { option: f.value.text }
@@ -601,10 +631,20 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
       // _explicit_ roll of the same shape would require a much rarer (and pricier)
       // item. Skip them entirely from stat matching — they're UI-only rows.
       if (f.group === 'item' || f.modTag === 'rune') continue
-      const leafValue = rollToValue(f.value)
+      if (f.statBetter === 0) continue
+      const leafValue = rollToValue(f.value, f.statBetter)
       if (!leafValue) continue
 
-      const ids = f.tradeIds && f.tradeIds.length > 0 ? f.tradeIds : [f.tradeId]
+      // Prefer a pseudo id when the mods DB publishes one — the server then
+      // evaluates a single aggregate stat (e.g. total-elemental-resistance)
+      // instead of us ANDing the three explicits. Falls through to the
+      // sibling-id OR group when pseudos aren't available.
+      const ids =
+        f.pseudoTradeIds && f.pseudoTradeIds.length > 0
+          ? f.pseudoTradeIds
+          : f.tradeIds && f.tradeIds.length > 0
+            ? f.tradeIds
+            : [f.tradeId]
       for (const id of ids) if (id.startsWith('pseudo.')) pseudos.add(id)
 
       const leaf: StatLeaf = { id: ids[0], disabled: false, value: leafValue }
@@ -950,16 +990,24 @@ export async function searchTrade(req: TradeSearchRequest): Promise<TradeSearchR
     const price = priceSortValue(r.listing?.price)
     return { r, matchN, exact, price }
   })
-  // Rank: most matched mods first (so 6/6 beats 5/6 beats 4/6), then cheapest within
-  // the same bucket. This mirrors the relax ladder above — the API returned things that
-  // have _at least_ K matches, and here we pull those with more matches to the top.
+  // Rank cheapest first — that's the whole point of "Price Check". We only fall
+  // back to matchN for tiebreaks: when two listings have the same (or no) price,
+  // prefer the one that matched more of the user's selected mods.
+  //
+  // Awakened-poe-trade / Exiled-Exchange-2 take the same stance: they let the
+  // server-side `sort: { price: 'asc' }` do the heavy lifting and trust the
+  // enabled-mod set to prune the pool down to listings the user actually wants
+  // to compare against. Relying on `defaultEnabled`-driven filtering (rares
+  // auto-disable their explicits) is what keeps this sort honest — otherwise a
+  // cheap listing that only matches 1/8 of the user's mods would leapfrog a 6/8
+  // near-match.
   scored.sort((a, b) => {
-    if (needleCount > 0 && b.matchN !== a.matchN) return b.matchN - a.matchN
     const pa = a.price
     const pb = b.price
-    if (pa !== undefined && pb !== undefined) return pa - pb
-    if (pa !== undefined) return -1
-    if (pb !== undefined) return 1
+    if (pa !== undefined && pb !== undefined && pa !== pb) return pa - pb
+    if (pa !== undefined && pb === undefined) return -1
+    if (pa === undefined && pb !== undefined) return 1
+    if (needleCount > 0 && b.matchN !== a.matchN) return b.matchN - a.matchN
     return 0
   })
   const top = scored.slice(0, limit)

@@ -50,6 +50,34 @@ export type TradeFilterOption = {
    * otherwise {@link modRoll} defines the top of the bar (match-this-item ceiling).
    */
   modRollBounds?: { min: number; max: number }
+  /**
+   * `1` = higher-is-better (positive stats — ES, spirit, resistances), `-1` = lower-is-better
+   * (negative stats — attribute requirements, cost multipliers), `0` = unranked.
+   *
+   * Sourced from the bundled PoE2 mods DB. The search builder uses this to pick between
+   * `{ min: roll }` and `{ max: roll }` on the server-side filter, so a -12% Str req
+   * row doesn't accidentally ask the server for "at least -12% strength required".
+   */
+  statBetter?: 1 | -1 | 0
+  /**
+   * Pseudo trade ids for this stat, when EE2's data publishes one. When present, the
+   * search prefers the pseudo id over the raw explicit/implicit/rune set to collapse
+   * multi-source mods (e.g. all resistance tiers) into a single server filter.
+   */
+  pseudoTradeIds?: string[]
+  /**
+   * Initial ticked/unticked state when the filters are first shown. Rare-item explicit
+   * mods default to un-ticked (following Exiled-Exchange-2 / APT), because searching for
+   * every explicit from a rare drops hit counts to zero — the user picks the 2-3 mods
+   * that actually drive the price.
+   */
+  defaultEnabled?: boolean
+  /**
+   * Live ticked/unticked state. When the renderer calls `trade:search`, disabled rows
+   * aren't even sent into the request — same effect as unchecking in the UI. Present
+   * only on the request payload; the parser sets `defaultEnabled` instead.
+   */
+  enabled?: boolean
 }
 
 export type ParseItemTextResponse = {
