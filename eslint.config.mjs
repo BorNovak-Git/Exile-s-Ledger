@@ -36,5 +36,12 @@ export default defineConfig(
       ]
     }
   },
-  eslintConfigPrettier
+  eslintConfigPrettier,
+  /** Standalone Node generators use plain `.mjs`; TS return-type syntax isn't available there. */
+  {
+    files: ['scripts/**/*.mjs'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off'
+    }
+  }
 )

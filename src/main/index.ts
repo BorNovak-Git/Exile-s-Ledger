@@ -5,6 +5,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { parseItemText } from './trade/parseItemText'
 import { fetchPoe2LeagueIds } from './trade/poe2Leagues'
+import { loadPoe2StatsDb } from './trade/poe2StatsDb'
 import { searchTrade } from './trade/searchTrade'
 import type {
   ApiErrorShape,
@@ -81,6 +82,11 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
+  // Kick off PoE2 stats DB load so mod-to-tradeId mapping is ready by the time the user pastes.
+  void loadPoe2StatsDb().catch((err) =>
+    console.warn('[poe2StatsDb] preload failed:', err instanceof Error ? err.message : err)
+  )
+
   // IPC test
   ipcMain.on('ping', () => console.log('pong'))
 
@@ -105,6 +111,8 @@ app.whenReady().then(() => {
     'trade:parseItemText',
     async (_evt, text: string): Promise<ParseItemTextResponse> => {
       console.log('[trade:parseItemText] input chars:', text?.length ?? 0)
+      // Ensure stats DB is loaded so mod→tradeId mapping is available for this parse.
+      await loadPoe2StatsDb().catch(() => undefined)
       const res = parseItemText(text)
       console.log('[trade:parseItemText] parsed:', {
         itemName: res.itemName,

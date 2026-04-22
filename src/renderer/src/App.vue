@@ -278,31 +278,36 @@ function toggleSelected(id: string, checked: boolean): void {
   selectedIds.value = next
 }
 
-/** Which numeric bounds to show for editing (search still uses whatever min/max are set). */
+/** Which bound inputs to show when not using the slider (pure ES caps, req level, legacy rows). */
 function numberSlotsFor(f: TradeFilterOption): ('min' | 'max')[] {
   if (f.value?.kind !== 'number') return []
-  const id = f.tradeId ?? ''
-  if (id === 'req_filters.lvl') return ['max']
-  if (/^(explicit\.|implicit\.|pseudo\.|rune\.)/.test(id)) return ['min', 'max']
-  // Client-matched mods (clipboard line, no trade stat id): same min/max editing as other affixes.
-  if (f.group === 'mods' && f.modSourceLine) return ['min', 'max']
-  return ['min']
+  const v = f.value
+  const hasMin = v.min !== undefined
+  const hasMax = v.max !== undefined
+  if (hasMin && !hasMax) return ['min']
+  if (hasMax && !hasMin) return ['max']
+  if (hasMin && hasMax) return ['min', 'max']
+  return []
 }
 
-function onFilterNumberInput(id: string, field: 'min' | 'max', raw: string): void {
+/** Awakened-style slider only on modifier rows; everything else uses plain inputs. */
+function numericUiFor(f: TradeFilterOption): 'slider' | 'inputs' {
+  if (f.value?.kind !== 'number') return 'inputs'
+  if (f.group !== 'mods') return 'inputs'
+  return 'slider'
+}
+
+function onFilterNumericPatch(id: string, patch: Partial<{ min: number; max: number }>): void {
   const list = parseResult.value?.filters
   if (!list) return
   const f = list.find((x) => x.id === id)
   if (!f || f.value?.kind !== 'number') return
-  const t = raw.trim()
-  const parsed: number | undefined = t === '' || t === '-' ? undefined : Number(t)
-  if (parsed !== undefined && Number.isNaN(parsed)) return
   const prev = f.value
-  f.value = {
-    kind: 'number',
-    min: field === 'min' ? parsed : prev.min,
-    max: field === 'max' ? parsed : prev.max
-  }
+  const nextMin = Object.prototype.hasOwnProperty.call(patch, 'min') ? patch.min : prev.min
+  const nextMax = Object.prototype.hasOwnProperty.call(patch, 'max') ? patch.max : prev.max
+  if (nextMin !== undefined && Number.isNaN(nextMin)) return
+  if (nextMax !== undefined && Number.isNaN(nextMax)) return
+  f.value = { kind: 'number', min: nextMin, max: nextMax }
 }
 
 const selectedFilters = computed(() => filters.value.filter((f) => selectedIds.value.has(f.id)))
@@ -316,8 +321,15 @@ function toPlainSelectedFilters(list: TradeFilterOption[]): TradeFilterOption[] 
       label: rawF.label,
       group: rawF.group,
       tradeId: rawF.tradeId,
+      tradeIds: rawF.tradeIds,
       modAffix: rawF.modAffix,
       modSourceLine: rawF.modSourceLine,
+      modTag: rawF.modTag,
+      modRoll: rawF.modRoll,
+      modRollBounds: rawF.modRollBounds,
+      statBetter: rawF.statBetter,
+      pseudoTradeIds: rawF.pseudoTradeIds ? [...rawF.pseudoTradeIds] : undefined,
+      enabled: true,
       value: rawV ? { ...rawV } : undefined
     }
   })
@@ -335,7 +347,19 @@ async function onConvert(): Promise<void> {
   try {
     const res = await window.api.trade.parseItemText(raw)
     parseResult.value = res
-    selectedIds.value = new Set(res.filters.map((f) => f.id))
+    // Seed ticked chips from the parser's per-filter `defaultEnabled` hint.
+    // On rares that means explicit mods arrive un-ticked (they usually don't
+    // drive price — the user hand-picks the 1-2 that do, e.g. +lvl-to-gems).
+    // Non-mod rows (rarity / category / defences / runes / implicits) are
+    // always ticked unless the parser explicitly flags them off.
+    selectedIds.value = new Set(
+      res.filters.filter((f) => f.defaultEnabled !== false).map((f) => f.id)
+    )
+    // Slider caps (`modRollBounds.max`) are baked into each mod filter by the
+    // main-process parser. Priority: (1) bundled T1 max lookup per trade id
+    // (from `src/main/trade/data/t1MaxRolls.json`, sourced from PoE2 game
+    // data), (2) inline `47(40-55)` tier range from the clipboard if
+    // "Advanced Mod Descriptions" is enabled, (3) the item's own roll.
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to parse item text'
   } finally {
@@ -373,6 +397,7 @@ async function onSearch(): Promise<void> {
       league: settings.value.league.trim() || 'Standard',
       baseUrl: settings.value.baseUrl.trim() || undefined,
       selectedFilters: plainSelected,
+      itemType: parseResult.value?.itemType,
       limit: 10
     })
     if (isApiErrorShape(res)) {
@@ -619,8 +644,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="gold"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -637,8 +663,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="muted"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -655,8 +682,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="gold"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -673,8 +701,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="purple"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -691,8 +720,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="purple"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -709,8 +739,9 @@ onUnmounted(() => {
                     :selected="selectedIds.has(f.id)"
                     bullet="purple"
                     :slots="numberSlotsFor(f)"
+                    :numeric-ui="numericUiFor(f)"
                     @toggle="toggleSelected"
-                    @num-input="onFilterNumberInput"
+                    @numeric-patch="onFilterNumericPatch"
                   />
                 </ul>
               </div>
@@ -1039,11 +1070,71 @@ onUnmounted(() => {
                 {{ line }}
               </div>
             </div>
+            <div v-if="listingTooltip.listing.stats.pseudoMods?.length" class="ttSection">
+              <div class="ttSLabel">Pseudo</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.pseudoMods"
+                :key="'ps' + i"
+                class="ttMod ttPseudo"
+              >
+                {{ line }}
+              </div>
+            </div>
             <div v-if="listingTooltip.listing.stats.explicitMods?.length" class="ttSection">
               <div class="ttSLabel">Explicit</div>
               <div
                 v-for="(line, i) in listingTooltip.listing.stats.explicitMods"
                 :key="'ex' + i"
+                class="ttMod"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.desecratedMods?.length" class="ttSection">
+              <div class="ttSLabel">Desecrated</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.desecratedMods"
+                :key="'des' + i"
+                class="ttMod ttDesecrated"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.sanctifiedMods?.length" class="ttSection">
+              <div class="ttSLabel">Sanctified</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.sanctifiedMods"
+                :key="'san' + i"
+                class="ttMod ttSanctified"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.scourgeMods?.length" class="ttSection">
+              <div class="ttSLabel">Scourge</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.scourgeMods"
+                :key="'sco' + i"
+                class="ttMod ttScourge"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.utilityMods?.length" class="ttSection">
+              <div class="ttSLabel">Utility</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.utilityMods"
+                :key="'ut' + i"
+                class="ttMod ttUtility"
+              >
+                {{ line }}
+              </div>
+            </div>
+            <div v-if="listingTooltip.listing.stats.logbookMods?.length" class="ttSection">
+              <div class="ttSLabel">Logbook</div>
+              <div
+                v-for="(line, i) in listingTooltip.listing.stats.logbookMods"
+                :key="'lb' + i"
                 class="ttMod"
               >
                 {{ line }}
@@ -1790,6 +1881,23 @@ onUnmounted(() => {
 }
 .ttEnchant {
   color: rgba(255, 170, 255, 0.9);
+}
+.ttDesecrated {
+  /* Abyssal green — matches the in-game desecrated mod tint. */
+  color: #2fb87d;
+}
+.ttSanctified {
+  color: rgba(250, 230, 160, 0.92);
+}
+.ttScourge {
+  color: rgba(255, 160, 120, 0.92);
+}
+.ttUtility {
+  color: rgba(170, 220, 255, 0.9);
+}
+.ttPseudo {
+  color: rgba(200, 200, 255, 0.72);
+  font-style: italic;
 }
 .ttCorrupted {
   margin-top: 12px;
